@@ -1,0 +1,16 @@
+# Rust
+/target
+/Cargo.lock
+
+# Traces
+/traces/
+
+# Environment
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
