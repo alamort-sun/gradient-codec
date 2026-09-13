@@ -1,3 +1,5 @@
+pub mod live;
+
 use crate::adapter::{CompletionRequest, ProviderId, TokenUsage};
 use crate::budget::BudgetState;
 use crate::critique::FailureHistory;
