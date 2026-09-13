@@ -431,3 +431,337 @@ mod tests {
         assert_ne!(decision.provider.0, "anthropic/claude-sonnet");
     }
 }
+
+#[cfg(test)]
+mod budget_aware_property_tests {
+    use super::*;
+    use crate::budget::{BudgetState, BudgetConfig};
+    use crate::critique::FailureHistory;
+
+    fn mock_providers() -> Vec<ProviderInfo> {
+        vec![
+            ProviderInfo {
+                id: ProviderId("openai/gpt-4o-mini".into()),
+                display_name: "GPT-4o mini".into(),
+                price_per_million_input: 0.15,
+                price_per_million_output: 0.60,
+                max_output_tokens: 16384,
+                avg_latency_ms: 800,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("anthropic/claude-sonnet".into()),
+                display_name: "Claude Sonnet".into(),
+                price_per_million_input: 3.00,
+                price_per_million_output: 15.00,
+                max_output_tokens: 8192,
+                avg_latency_ms: 1200,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("ollama/local".into()),
+                display_name: "Ollama local".into(),
+                price_per_million_input: 0.0,
+                price_per_million_output: 0.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 2000,
+                supports_streaming: true,
+                supports_tools: false,
+                is_local: true,
+            },
+        ]
+    }
+
+    fn mock_request(prompt: &str, max_tokens: u32) -> CompletionRequest {
+        CompletionRequest {
+            prompt: prompt.into(),
+            max_tokens,
+            temperature: None,
+            system: None,
+            tools: None,
+            task_type: None,
+        }
+    }
+
+    /// PROPERTY: Higher quality → selected (holding cost constant)
+    #[test]
+    fn higher_quality_wins_when_cost_equal() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("provider-a".into()),
+                display_name: "Provider A".into(),
+                price_per_million_input: 1.0,
+                price_per_million_output: 1.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("provider-b".into()),
+                display_name: "Provider B".into(),
+                price_per_million_input: 1.0,
+                price_per_million_output: 1.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+        ];
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("provider-a".into()), 0.3)
+            .with_score(ProviderId("provider-b".into()), 0.9)
+            .with_quality_weight(0.5);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let history = FailureHistory::new();
+        let request = mock_request("Hello", 100);
+
+        let decision = policy.select(&request, &budget, &history, &providers).unwrap();
+
+        assert_eq!(
+            decision.provider.0, "provider-b",
+            "Higher quality provider must be selected when costs are equal"
+        );
+    }
+
+    /// PROPERTY: Lower cost → selected (holding quality constant)
+    #[test]
+    fn lower_cost_wins_when_quality_equal() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("cheap".into()),
+                display_name: "Cheap".into(),
+                price_per_million_input: 0.10,
+                price_per_million_output: 0.10,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("expensive".into()),
+                display_name: "Expensive".into(),
+                price_per_million_input: 10.0,
+                price_per_million_output: 10.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+        ];
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("cheap".into()), 0.7)
+            .with_score(ProviderId("expensive".into()), 0.7)
+            .with_quality_weight(0.5);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let history = FailureHistory::new();
+        let request = mock_request("Hello", 100);
+
+        let decision = policy.select(&request, &budget, &history, &providers).unwrap();
+
+        assert_eq!(
+            decision.provider.0, "cheap",
+            "Cheaper provider must be selected when quality scores are equal"
+        );
+    }
+
+    /// PROPERTY: Known-failed provider scores lower than clean provider
+    #[test]
+    fn failure_penalty_reroutes_from_identical_provider() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("clean".into()),
+                display_name: "Clean".into(),
+                price_per_million_input: 1.0,
+                price_per_million_output: 1.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("failed".into()),
+                display_name: "Failed".into(),
+                price_per_million_input: 1.0,
+                price_per_million_output: 1.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+        ];
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("clean".into()), 0.7)
+            .with_score(ProviderId("failed".into()), 0.7)
+            .with_quality_weight(0.5);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let mut history = FailureHistory::new();
+
+        for _ in 0..2 {
+            history.record(ProviderId("failed".into()), FailureClass::Timeout);
+        }
+
+        let request = mock_request("Hello", 100);
+        let decision = policy.select(&request, &budget, &history, &providers).unwrap();
+
+        assert_eq!(
+            decision.provider.0, "clean",
+            "Clean provider must be selected over identical provider with failures"
+        );
+    }
+
+    /// PROPERTY: Zero-cost provider (Ollama) doesn't cause NaN
+    #[test]
+    fn zero_cost_provider_does_not_crash() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("ollama/local".into()),
+                display_name: "Ollama".into(),
+                price_per_million_input: 0.0,
+                price_per_million_output: 0.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 2000,
+                supports_streaming: true,
+                supports_tools: false,
+                is_local: true,
+            },
+        ];
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("ollama/local".into()), 0.5)
+            .with_quality_weight(0.6);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let history = FailureHistory::new();
+        let request = mock_request("Hello", 100);
+
+        let decision = policy.select(&request, &budget, &history, &providers);
+
+        assert!(decision.is_some(), "Must return a decision for zero-cost provider");
+        let d = decision.unwrap();
+        assert!(d.estimated_cost.is_finite(), "estimated_cost must not be NaN/Inf");
+        assert!(d.estimated_cost >= 0.0, "estimated_cost must be non-negative");
+    }
+
+    /// PROPERTY: Zero-cost provider has max cost advantage
+    #[test]
+    fn zero_cost_provider_has_max_cost_advantage() {
+        let providers = mock_providers();
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("openai/gpt-4o-mini".into()), 0.5)
+            .with_score(ProviderId("anthropic/claude-sonnet".into()), 0.5)
+            .with_score(ProviderId("ollama/local".into()), 0.5)
+            .with_quality_weight(0.1);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let history = FailureHistory::new();
+        let request = mock_request("Hello", 100);
+
+        let decision = policy.select(&request, &budget, &history, &providers).unwrap();
+
+        assert_eq!(
+            decision.provider.0, "ollama/local",
+            "Ollama (free) must win when cost_weight is high and all quality scores are equal"
+        );
+    }
+
+    /// PROPERTY: Blocklisted provider is never selected
+    #[test]
+    fn blocklisted_provider_never_selected() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("best".into()),
+                display_name: "Best".into(),
+                price_per_million_input: 0.01,
+                price_per_million_output: 0.01,
+                max_output_tokens: 4096,
+                avg_latency_ms: 500,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+            ProviderInfo {
+                id: ProviderId("worst".into()),
+                display_name: "Worst".into(),
+                price_per_million_input: 10.0,
+                price_per_million_output: 10.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 3000,
+                supports_streaming: false,
+                supports_tools: false,
+                is_local: false,
+            },
+        ];
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("best".into()), 0.99)
+            .with_score(ProviderId("worst".into()), 0.01)
+            .with_quality_weight(0.9);
+
+        let budget = BudgetState::new(BudgetConfig::default());
+        let mut history = FailureHistory::new();
+
+        // Blocklist "best" — Timeout has 30s blocklist duration
+        history.record(ProviderId("best".into()), FailureClass::Timeout);
+
+        let request = mock_request("Hello", 100);
+        let decision = policy.select(&request, &budget, &history, &providers).unwrap();
+
+        assert_eq!(
+            decision.provider.0, "worst",
+            "Blocklisted provider must never be selected, even if it's the best"
+        );
+    }
+
+    /// PROPERTY: Returns None when no provider is affordable
+    #[test]
+    fn returns_none_when_no_provider_affordable() {
+        let providers = vec![
+            ProviderInfo {
+                id: ProviderId("expensive".into()),
+                display_name: "Expensive".into(),
+                price_per_million_input: 1000.0,
+                price_per_million_output: 1000.0,
+                max_output_tokens: 4096,
+                avg_latency_ms: 1000,
+                supports_streaming: true,
+                supports_tools: true,
+                is_local: false,
+            },
+        ];
+
+        let config = BudgetConfig {
+            total_usd: 0.001,
+            per_request_cap_usd: 0.0001,
+            safety_margin: 1.2,
+        };
+        let budget = BudgetState::new(config);
+
+        let policy = BudgetAware::new()
+            .with_score(ProviderId("expensive".into()), 0.9);
+
+        let history = FailureHistory::new();
+        let request = mock_request("Hello world this is a long prompt", 1000);
+
+        let decision = policy.select(&request, &budget, &history, &providers);
+
+        assert!(decision.is_none(),
+            "Must return None when no provider is affordable");
+    }
+}

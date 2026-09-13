@@ -65,10 +65,11 @@ impl BudgetState {
         remaining >= threshold
     }
 
-    /// Atomically reserve budget for a request. This WRITES to spent_centi_milli
-    /// via CAS loop, preventing concurrent requests from both passing the check.
-    /// Call BEFORE dispatching to a provider. On failure, call reconcile(est, 0.0)
-    /// to release the hold. On success, call reconcile(est, actual).
+    /// Atomically reserve budget for a request via CAS loop.
+    /// This WRITES to spent_centi_milli, preventing concurrent requests from
+    /// both passing the check. Call BEFORE dispatching to a provider.
+    /// On failure, call reconcile(est, 0.0) to release the hold.
+    /// On success, call reconcile(est, actual).
     pub fn reserve(&self, estimated_usd: f64) -> Result<(), BudgetError> {
         if estimated_usd > self.config.per_request_cap_usd {
             return Err(BudgetError::PerRequestCapExceeded {
@@ -100,7 +101,7 @@ impl BudgetState {
                 Ordering::SeqCst,
             ) {
                 Ok(_) => return Ok(()),
-                Err(_) => continue, // retry CAS
+                Err(_) => continue,
             }
         }
     }
@@ -219,36 +220,130 @@ mod tests {
         handle.join().unwrap();
         assert!((budget.remaining_usd() - 0.04).abs() < 0.0001);
     }
+}
 
+#[cfg(test)]
+mod concurrency_tests {
+    use super::*;
+    use std::sync::Arc;
+    use std::thread;
+    use std::sync::Barrier;
+
+    /// THE KILLER TEST: Two concurrent reserves against a budget
+    /// that can only satisfy one. With the OLD (buggy) code, both
+    /// pass. With the FIXED code, exactly one succeeds.
     #[test]
-    fn test_concurrent_reserve_cannot_exceed_ceiling() {
-        // Two threads each try to reserve 0.06 from a 0.10 budget.
-        // With the old read-only reserve(), both would succeed and overdraw.
-        // With the CAS-based reserve(), only one should win.
+    fn concurrent_reserve_prevents_double_spend() {
         let config = BudgetConfig {
             total_usd: 0.10,
             per_request_cap_usd: 0.10,
             safety_margin: 1.0,
         };
         let budget = Arc::new(BudgetState::new(config));
+        let budget_clone = Arc::clone(&budget);
 
-        let budget1 = budget.clone();
-        let budget2 = budget.clone();
-        let h1 = std::thread::spawn(move || budget1.reserve(0.06));
-        let h2 = std::thread::spawn(move || budget2.reserve(0.06));
+        let barrier = Arc::new(Barrier::new(2));
 
-        let r1 = h1.join().unwrap();
-        let r2 = h2.join().unwrap();
+        let barrier_clone = Arc::clone(&barrier);
+        let handle1 = thread::spawn(move || {
+            barrier_clone.wait();
+            budget.reserve(0.06)
+        });
 
-        // Exactly one should succeed, one should fail
-        assert!(r1.is_ok() != r2.is_ok(), "one reserve must fail: r1={:?} r2={:?}", r1, r2);
+        let barrier_clone2 = Arc::clone(&barrier);
+        let handle2 = thread::spawn(move || {
+            barrier_clone2.wait();
+            budget_clone.reserve(0.06)
+        });
 
-        // Total spent should be 0.06, not 0.12
-        assert!((budget.spent_usd() - 0.06).abs() < 0.0001);
+        let result1 = handle1.join().unwrap();
+        let result2 = handle2.join().unwrap();
+
+        let successes = [&result1, &result2]
+            .iter()
+            .filter(|r| r.is_ok())
+            .count();
+
+        assert_eq!(
+            successes, 1,
+            "Exactly one concurrent reserve must succeed — got {}.",
+            successes
+        );
     }
 
+    /// Three threads, budget for exactly two.
     #[test]
-    fn test_reserve_release_on_failure() {
+    fn concurrent_reserve_three_way_contention() {
+        let config = BudgetConfig {
+            total_usd: 0.15,
+            per_request_cap_usd: 0.10,
+            safety_margin: 1.0,
+        };
+        let budget = Arc::new(BudgetState::new(config));
+        let barrier = Arc::new(Barrier::new(3));
+
+        let mut handles = vec![];
+        for _ in 0..3 {
+            let b = Arc::clone(&budget);
+            let bar = Arc::clone(&barrier);
+            handles.push(thread::spawn(move || {
+                bar.wait();
+                b.reserve(0.06)
+            }));
+        }
+
+        let results: Vec<_> = handles.into_iter().map(|h| h.join().unwrap()).collect();
+        let successes = results.iter().filter(|r| r.is_ok()).count();
+
+        assert_eq!(
+            successes, 2,
+            "Exactly two of three concurrent reserves must succeed — got {}",
+            successes
+        );
+    }
+
+    /// Reserve then reconcile with refund frees budget for next reserve.
+    #[test]
+    fn reserve_reconcile_refund_then_reserve() {
+        let config = BudgetConfig {
+            total_usd: 1.0,
+            per_request_cap_usd: 0.50,
+            safety_margin: 1.0,
+        };
+        let budget = BudgetState::new(config);
+
+        budget.reserve(0.80).expect("reserve 0.80 should succeed");
+        budget.reconcile(0.80, 0.50).expect("reconcile should succeed");
+
+        assert!((budget.spent_usd() - 0.50).abs() < 0.0001,
+            "spent should be 0.50 after refund, got {}", budget.spent_usd());
+
+        budget.reserve(0.50).expect("should have 0.50 available after refund");
+    }
+
+    /// Reserve then reconcile with overrun charges extra.
+    #[test]
+    fn reserve_reconcile_overrun() {
+        let config = BudgetConfig {
+            total_usd: 1.0,
+            per_request_cap_usd: 0.50,
+            safety_margin: 1.0,
+        };
+        let budget = BudgetState::new(config);
+
+        budget.reserve(0.30).expect("reserve should succeed");
+        budget.reconcile(0.30, 0.45).expect("reconcile should succeed");
+
+        assert!((budget.spent_usd() - 0.45).abs() < 0.0001,
+            "spent should be 0.45 after overrun, got {}", budget.spent_usd());
+
+        budget.reserve(0.50).expect("should have 0.55 available");
+        budget.reserve(0.60).expect_err("should fail — only 0.05 remaining");
+    }
+
+    /// Sequential reserves respect the budget limit exactly.
+    #[test]
+    fn sequential_reserve_exact_limit() {
         let config = BudgetConfig {
             total_usd: 0.10,
             per_request_cap_usd: 0.10,
@@ -256,12 +351,30 @@ mod tests {
         };
         let budget = BudgetState::new(config);
 
-        // Reserve, then release via reconcile(est, 0.0)
-        budget.reserve(0.05).unwrap();
-        assert!((budget.spent_usd() - 0.05).abs() < 0.0001);
+        assert!(budget.reserve(0.06).is_ok(), "first reserve of 0.06 should succeed");
+        assert!(budget.reserve(0.06).is_err(),
+            "second reserve of 0.06 should fail — only 0.04 left");
+        assert!(budget.reserve(0.04).is_ok(),
+            "reserve of 0.04 should succeed — exactly fits");
+        assert!(budget.reserve(0.01).is_err(),
+            "reserve of 0.01 should fail — budget exhausted");
+    }
 
-        budget.reconcile(0.05, 0.0).unwrap();
-        assert!((budget.spent_usd() - 0.0).abs() < 0.0001);
-        assert!((budget.remaining_usd() - 0.10).abs() < 0.0001);
+    /// Reconcile without prior reserve is safe (error path recovery).
+    #[test]
+    fn reconcile_without_reserve_is_safe() {
+        let config = BudgetConfig {
+            total_usd: 1.0,
+            per_request_cap_usd: 0.50,
+            safety_margin: 1.0,
+        };
+        let budget = BudgetState::new(config);
+
+        let result = budget.reconcile(0.10, 0.05);
+        assert!(result.is_ok(), "reconcile without reserve should not panic");
+
+        assert!((budget.spent_usd() - 0.05).abs() < 0.0001,
+            "spent should be 0.05 after reconcile-without-reserve, got {}",
+            budget.spent_usd());
     }
 }
