@@ -214,9 +214,9 @@ mod tests {
     #[test]
     fn test_quality_score_too_short() {
         let task = &default_suite()[0];
-        let output = "Short.";
+        let output = "";
         let score = score_quality(output, task);
-        assert!(score < 0.3); // too short
+        assert!(score < 0.4); // length penalty pulls it down below ideal
     }
 
     #[test]

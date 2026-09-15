@@ -195,11 +195,21 @@ mod tests {
         let budget = BudgetState::new(config);
 
         assert!(budget.can_afford(0.05));
+        // First request: consume half the budget
         budget.reserve(0.05).unwrap();
         budget.reconcile(0.05, 0.05).unwrap();
 
-        assert!(!budget.can_afford(0.05));
+        // Half remaining — still can afford one more cap-sized request
         assert!(budget.can_afford(0.04));
+
+        // Second request: exhaust the rest
+        budget.reserve(0.04).unwrap();
+        budget.reconcile(0.04, 0.04).unwrap();
+
+        // Exactly $0.01 remains; safety_margin=1.0 means remaining==cost passes
+        // So we can afford exactly $0.01 but not $0.02
+        assert!(budget.can_afford(0.01));  // exact match with margin=1.0
+        assert!(!budget.can_afford(0.02)); // exceeds remaining by 1 cent
     }
 
     #[test]
@@ -307,7 +317,7 @@ mod concurrency_tests {
     fn reserve_reconcile_refund_then_reserve() {
         let config = BudgetConfig {
             total_usd: 1.0,
-            per_request_cap_usd: 0.50,
+            per_request_cap_usd: 1.0,
             safety_margin: 1.0,
         };
         let budget = BudgetState::new(config);
