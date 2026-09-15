@@ -187,3 +187,11 @@ against the applicable pinned version of `gradient-codec`.
 Commercial use, hosting, deployment, distribution, resale, or
 incorporation into a commercial product/service requires a separate
 written license.
+
+## License and permitted use
+
+The software is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
+
+Individuals, hobbyists, students, independent researchers, educators, nonprofits, and community projects are welcome to use, modify, and share the software for noncommercial purposes. See [USE-POLICY.md](USE-POLICY.md).
+
+Commercial use requires a separate written license. See [COMMERCIAL.md](COMMERCIAL.md).
