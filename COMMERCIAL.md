@@ -1,58 +1,16 @@
-# Commercial License Terms — gradient-codec
+# Commercial Licensing
 
-All prices in CAD. Subject to a separate written agreement.
-This document is a non-binding commercial offer.
+This repository's software source is licensed under the **PolyForm Noncommercial License 1.0.0** (see [LICENSE](LICENSE)).
 
-The software in this repository is licensed under PolyForm Noncommercial 1.0.0.
-Any commercial use—including but not limited to: selling the software, using it
-in a commercial product or service, offering it as part of a paid offering,
-hosting it for paying customers, or deriving monetary compensation from it—
-requires a separate written commercial license.
+The following require a **separate written license** from the copyright holder:
 
-## Commercial Tiers
+- Commercial use of the software
+- Commercial hosting or deployment
+- Commercial distribution or resale
+- Incorporation of the software into a commercial product or service
 
-### TIER 1: INDIE — $500 one-time
+Noncommercial purposes remain permitted under the license terms, including personal use for research, experiment, and testing for the benefit of public knowledge, personal study, private entertainment, hobby projects, and use by charitable organizations, educational institutions, public research organizations, public safety or health organizations, environmental protection organizations, and government institutions.
 
-- Annual revenue ≤ $100K
-- 1 developer, 1 product
-- 1 year of updates
-- Attribution required
+For commercial licensing inquiries, contact the repository owner.
 
-### TIER 2: STARTUP — $5,000/year
-
-- Annual revenue ≤ $5M
-- ≤ 5 developers
-- Unlimited products
-- Updates + priority issue support
-- Attribution required
-
-### TIER 3: ENTERPRISE — $25,000/year
-
-- Annual revenue > $5M
-- Unlimited developers
-- Consulting (4 hours/month)
-- Audit support
-- Custom integration
-- Attribution required
-
-### TIER 4: CERTIFIED — Custom pricing
-
-- We audit your system
-- "Gradient Codec Certified" = passed conformance tests only
-- Does NOT mean legal/clinical/safety compliance
-- Annual re-audit required
-
-## Certification Disclaimer
-
-"Gradient Codec Certified" means the system has passed published conformance
-tests. It does not constitute legal compliance, clinical safety certification,
-fitness for any particular purpose, or endorsement by the licensor.
-
-## Contact
-
-To obtain a commercial license, contact: evelynn.h22@gmail.com
-
----
-
-All prices in CAD. Subject to a separate written agreement.
-This document is a non-binding commercial offer.
+Third-party dependencies remain under their own original terms — see [DEPENDENCIES.md](DEPENDENCIES.md).
