@@ -2,7 +2,7 @@
 name = "gradient-codec"
 version = "0.1.0"
 edition = "2021"
-license = "MIT OR Apache-2.0"
+	license-file = "LICENSE"
 description = "Budget-aware multi-model orchestration runtime with reproducible traces and cross-model failure critique"
 
 [dependencies]

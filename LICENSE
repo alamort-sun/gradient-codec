@@ -1,21 +1,113 @@
-MIT License
+# PolyForm Noncommercial License 1.0.0
 
-Copyright (c) 2026 alamort-sun
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+## Copyright and License Notice
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+Copyright © 2026 Evelynn Hudson / alamort-sun
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+This software is licensed under the PolyForm Noncommercial License 1.0.0.
+
+You may use, modify, and distribute this software for any purpose that does
+not involve commercial advantage or monetary compensation, subject to the
+terms below. For commercial use, see COMMERCIAL.md.
+
+---
+
+## License Text
+
+### PolyForm Noncommercial License 1.0.0
+
+<https://polyformproject.org/licenses/noncommercial/1.0.0>
+
+#### 1. Definitions
+
+**"Copyright"** means copyrights, database rights, moral rights, patent
+rights, and similar rights, whether or not registered.
+
+**"Covered Work"** means this software, including source code,
+documentation, and any modifications or derivatives.
+
+**"Data"** means any information provided as input or generated as output
+by the Covered Work, other than this software itself.
+
+**"Distribute"** means to make the Covered Work available to any third party,
+whether by sale, gift, lease, loan, publication, or any other means.
+
+**"Licensor"** means the copyright holder of the Covered Work.
+
+**"Noncommercial"** means not primarily intended for or directed towards
+commercial advantage or monetary compensation. For clarification,
+"Noncommercial" does not mean "free of charge."
+
+**"Source Code"** means the preferred form of the Covered Work for making
+modifications to it.
+
+**"You"** or "Your"** means the licensee.
+
+#### 2. Grant of Copyright License
+
+Subject to the terms and conditions of this License, Licensor grants You a
+worldwide, non-exclusive, no-charge, royalty-free copyright license to
+reproduce, prepare derivative works of, publicly display, publicly perform,
+sublicense, and distribute the Covered Work and any derivative works,
+provided that such use is Noncommercial.
+
+#### 3. Grant of Patent License
+
+Subject to the terms and conditions of this License, Licensor grants You a
+worldwide, non-exclusive, no-charge, royalty-free patent license to make,
+have made, use, offer to sell, sell, import, and otherwise transfer the
+Covered Work, provided that such use is Noncommercial.
+
+This patent license does not apply to any Covered Work that You
+incorporate into a larger work that is not itself a Covered Work, where
+the patent claims would read on only the larger work as a whole.
+
+#### 4. Conditions
+
+If You Distribute the Covered Work, You must:
+
+1.  provide recipients a copy of this License, and
+2.  ensure that recipients can access the Source Code of the Covered Work,
+    and
+3.  retain all copyright, patent, trademark, and attribution notices in
+    the Covered Work.
+
+#### 5. Noncommercial Requirement
+
+You may exercise the rights granted above only for Noncommercial purposes.
+If You wish to use the Covered Work for commercial purposes—including but
+not limited to: selling the Covered Work, using it in a commercial product
+or service, offering it as part of a paid offering, or deriving monetary
+compensation from it—You must obtain a separate commercial license from
+Licensor. See COMMERCIAL.md for commercial licensing terms.
+
+#### 6. Disclaimer of Warranty
+
+The Covered Work is provided "as is," without warranty of any kind, express
+or implied, including but not limited to the warranties of merchantability,
+fitness for a particular purpose, title, and non-infringement.
+
+#### 7. Limitation of Liability
+
+In no event shall Licensor be liable for any direct, indirect, incidental,
+special, exemplary, or consequential damages arising from the use or
+inability to use the Covered Work, even if Licensor has been advised of the
+possibility of such damages.
+
+#### 8. No Trademark License
+
+This License does not grant You any rights to use Licensor's trademarks,
+service marks, or trade names.
+
+#### 9. Termination
+
+This License terminates automatically if You breach any term of this
+License. Upon termination, You must cease all use and distribution of the
+Covered Work.
+
+#### 10. Entire Agreement
+
+This License constitutes the entire agreement between Licensor and You
+regarding the Covered Work.

@@ -1,6 +1,8 @@
 # Gradient Codec
 
-> A Rust-based budget-aware multi-model orchestration runtime with reproducible traces and cross-model failure critique.
+> The authoritative implementation of Vector13D types, enum semantics, invariants, and validity checks for the Neural-Representation Boundary.
+
+A Rust-based budget-aware multi-model orchestration runtime with reproducible traces, cross-model failure critique, and the canonical 13-dimensional state type that binds affective telemetry to text.
 
 ## Problem
 
@@ -17,11 +19,42 @@ Teams running multi-model workflows in production face four problems no current 
 
 Gradient Codec is a local-first Rust runtime that:
 
+- **Defines the canonical Vector13D type** — 13 semantic fields that preserve weight, temperature, and axis of a signal that plain text strips away
 - **Routes tasks among LLM providers** according to quality, latency, token cost, privacy constraints, and failure history
 - **Enforces budget ceilings** with predictive cost estimation before dispatch, not after
 - **Emits reproducible traces**: every routing decision, model call, token count, and response is logged in a structured format that can be deterministically replayed
 - **Routes failures with cross-model critique**: when a model fails, the failure is classified (timeout, content policy, rate limit, quality degradation, malformed output) and the retry is routed to the model best suited to recover from that failure class
 - **Benchmarks routing policies**: quality-per-token and successful-task-per-dollar metrics that let you compare policies on value, not just price
+
+## Vector13D — The Canonical Type
+
+The state space is **fixed 13D in semantic structure**. Not a dynamic embedding.
+
+```
+G = R^11 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
+```
+
+```rust
+pub struct Vector13D {
+    pub amplitude: f64,      // 1.  signal strength → glyph weight
+    pub frequency: f64,      // 2.  signal activity rate
+    pub phase: f64,          // 3.  temporal position in cycle
+    pub coherence: f64,      // 4.  harmonic alignment
+    pub entropy: f64,         // 5.  disorder / unpredictability
+    pub composition: f64,    // 6.  truth meter (expressiveness)
+    pub resonance: f64,      // 7.  bandwidth / focus
+    pub ozone_buffer: f64,   // 8.  lightness / energy
+    pub domain_wall: DomainWall,       // 9.  connection: Linked, Broken, Gradient
+    pub su2_polarity: f64,  // 10. hue in degrees [0,360)
+    pub torsion: f64,        // 11. skew — temporal lean
+    pub gauge_coupling: GaugeCoupling, // 12. rotation: Static, Spinning, Oscillating
+    pub closure: f64,        // 13. cycle completeness
+}
+```
+
+Treat `domain_wall` and `gauge_coupling` as **categorical types**. Never flatten to scalars with assumed ordering.
+
+Observed baselines (`observed_n1()`, `observed_n2()`) provide seed data from voice recordings. These are testable observations, not universal laws.
 
 ## Architecture
 
@@ -45,18 +78,11 @@ Gradient Codec is a local-first Rust runtime that:
 ├──────────────────────────────────────────────────────┤
 │              Benchmark Suite                           │
 │  (Quality-per-token · Successful-task-per-dollar)     │
+├──────────────────────────────────────────────────────┤
+│              vector13d (canonical type)                │
+│  Vector13D · DomainWall · GaugeCoupling · baselines   │
 └──────────────────────────────────────────────────────┘
 ```
-
-## v0.1 Scope
-
-- [x] Routing policy interface (provider-agnostic)
-- [x] Token/cost ledger with budget ceilings
-- [x] Predictive cost estimation before dispatch
-- [x] JSON trace output + deterministic replay
-- [x] One benchmark suite (quality-per-token, successful-task-per-dollar)
-- [x] CLI + minimal HTTP API layer
-- [x] Adapters: OpenAI, Anthropic, Ollama (local), one OpenAI-compatible custom
 
 ## Quick Start
 
@@ -82,120 +108,76 @@ gradient-codec benchmark --policies cheapest-first,quality-first --tasks ./bench
 ```rust
 pub trait RoutingPolicy: Send + Sync {
     fn select(
-        &mut self,
-        request: &Request,
+        &self,
+        request: &CompletionRequest,
         budget: &BudgetState,
         history: &FailureHistory,
         providers: &[ProviderInfo],
-    ) -> RoutingDecision;
+    ) -> Option<RoutingDecision>;
 
     fn name(&self) -> &str;
 }
 
 pub struct RoutingDecision {
     pub provider: ProviderId,
-    pub estimated_cost: TokenCost,
+    pub estimated_cost: f64,
     pub rationale: String,
     pub fallback_chain: Vec<ProviderId>,
 }
 ```
 
-## Failure Critique Classifier
+Built-in policies: `CheapestFirst`, `QualityFirst`, `BudgetAware`.
+
+## Budget Management
+
+Atomic fixed-point budget with lock-free `reserve()` / `reconcile()`:
 
 ```rust
-pub enum FailureClass {
-    Timeout,
-    RateLimit,
-    ContentPolicy,
-    MalformedOutput,
-    QualityDegradation { expected_quality: f64, observed: f64 },
-    ProviderError { status_code: u16 },
-}
+let budget = BudgetState::new(BudgetConfig {
+    total_usd: 10.0,
+    per_request_cap_usd: 1.0,
+    safety_margin: 1.2,
+});
 
-pub trait FailureCritic: Send + Sync {
-    fn classify(&self, failure: &Failure) -> FailureClass;
-    fn recommend_retry(&self, class: &FailureClass, providers: &[ProviderInfo]) -> Option<ProviderId>;
-}
+budget.reserve(0.05)?;        // CAS loop, prevents double-spend
+budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 ```
 
-## Trace Format
+## v0.1 Scope
 
-Every routing decision and model call emits a structured trace:
-
-```json
-{
-  "trace_id": "01J8T24PJDXX69RM7XV24SQT11",
-  "timestamp": "2026-09-13T19:30:00Z",
-  "request": {
-    "prompt_hash": "sha256:abc123...",
-    "max_tokens": 1024,
-    "task_type": "summarization"
-  },
-  "routing": {
-    "policy": "budget-aware-quality",
-    "selected_provider": "anthropic/claude-sonnet",
-    "estimated_cost": { "input_tokens": 850, "output_tokens": 300, "usd": 0.008 },
-    "rationale": "within budget, highest quality-per-token for summarization",
-    "fallback_chain": ["openai/gpt-4o-mini", "deepseek/deepseek-chat"]
-  },
-  "result": {
-    "provider": "anthropic/claude-sonnet",
-    "actual_cost": { "input_tokens": 852, "output_tokens": 287, "usd": 0.0078 },
-    "latency_ms": 1234,
-    "quality_score": 0.92
-  },
-  "failure": null,
-  "budget_after": { "remaining_usd": 0.042, "spent_usd": 0.008 }
-}
-```
-
-Traces are replayable: `gradient-codec replay` re-executes the routing decision against the same input, budget state, and failure history, producing a new trace for comparison.
-
-## Benchmark Suite
-
-The benchmark suite measures two metrics across a set of predefined tasks:
-
-- **Quality-per-token**: a quality score (0.0-1.0) divided by tokens consumed
-- **Successful-task-per-dollar**: fraction of tasks completed successfully divided by USD spent
-
-```bash
-$ gradient-codec benchmark --policies cheapest-first,quality-first,budget-aware --tasks ./suite/
-
-Policy              | Quality/Token | Tasks/$  | Avg Latency | Total Cost
-cheapest-first      | 0.031          | 8.2      | 891ms       | $0.042
-quality-first       | 0.048          | 5.1      | 1452ms      | $0.078
-budget-aware        | 0.044          | 7.8      | 1103ms      | $0.051
-```
-
-## Differentiation
-
-| Feature | LiteLLM | rust-genai | Gradient Codec |
-|--------|---------|-----------|----------------|
-| Provider routing | ✅ | ✅ | ✅ |
-| Cost tracking | ✅ | ❌ | ✅ |
-| Budget ceilings | After-fact | ❌ | **Predictive** |
-| Reproducible traces | Logs only | ❌ | **Deterministic replay** |
-| Failure classification | Single-hop fallback | ❌ | **Cross-model critique** |
-| Quality-per-token benchmarks | ❌ | ❌ | ✅ |
-| Local-first (no proxy required) | ❌ (proxy) | ✅ | ✅ |
-| Rust core | ✅ (Python SDK) | ✅ | ✅ |
+- [x] Routing policy interface (provider-agnostic)
+- [x] Token/cost ledger with budget ceilings
+- [x] Predictive cost estimation before dispatch
+- [x] JSON trace output + deterministic replay
+- [x] One benchmark suite (quality-per-token, successful-task-per-dollar)
+- [x] CLI + minimal HTTP API layer
+- [x] Adapters: OpenAI, Anthropic, Ollama (local), one OpenAI-compatible custom
+- [x] Vector13D canonical type with observed baselines
 
 ## Roadmap
 
-- **v0.1** (72h): CLI, routing interface, budget manager, 3 adapters, traces, one benchmark
 - **v0.2**: Streaming support, more adapters (Gemini, Groq, Cohere, vLLM), failure critique classifier
 - **v0.3**: Policy DSL, web dashboard, distributed tracing export (OpenTelemetry)
 - **v0.4**: Automated policy tuning from benchmark results, A/B policy comparison
 - **v0.5**: Privacy-constrained routing (on-prem models, data residency rules)
 
+## Authority Boundary
+
+`gradient-codec` is the authoritative implementation of Vector13D
+types, enum semantics, invariants, and validity checks.
+
+Downstream repositories (`gradient-jelle`, `gradient-space-time`,
+`gradient-speak`) may learn from, store, query, route, or render
+codec-valid states. Learned predictions, database-derived patterns,
+and generated outputs are not authoritative and must be validated
+against the applicable pinned version of `gradient-codec`.
+
 ## License
 
-MIT or Apache-2.0 (dual-licensed, contributor-friendly)
+- **Software**: PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE)
+- **Invariants** (INVARIANTS.md): CC0 1.0 Universal — see [LICENSES/CC0-1.0.txt](LICENSES/CC0-1.0.txt)
+- **Commercial use**: see [COMMERCIAL.md](COMMERCIAL.md)
 
-## Why This Exists
-
-Multi-model orchestration is not routing. It is deciding *which model to trust with a shrinking budget, a quality bar, and a memory of what went wrong last time* — and proving you made the right call with evidence you can replay.
-
-Routers exist. Orchestration runtimes with budget-aware routing, reproducible traces, deterministic replay, and cross-model failure critique do not.
-
-That gap is Gradient Codec.
+Commercial use, hosting, deployment, distribution, resale, or
+incorporation into a commercial product/service requires a separate
+written license.
