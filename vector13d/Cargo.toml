@@ -1,0 +1,10 @@
+[package]
+name = "vector13d"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Vector13D: the 13-field type that binds affective telemetry to text — weight, temperature, and axis preserved"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"

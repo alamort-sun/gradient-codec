@@ -3,10 +3,7 @@ name = "gradient-codec"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
-description = "A budget-aware multi-model orchestration runtime with reproducible traces and cross-model failure critique"
-repository = "https://github.com/pantheon/gradient-codec"
-keywords = ["llm", "ai", "orchestration", "routing", "budget"]
-categories = ["command-line-utilities", "api-bindings", "development-tools"]
+description = "Budget-aware multi-model orchestration runtime with reproducible traces and cross-model failure critique"
 
 [dependencies]
 tokio = { version = "1.40", features = ["full"] }
@@ -30,3 +27,7 @@ mockito = "1.5"
 [[bin]]
 name = "gradient-codec"
 path = "src/main.rs"
+
+[workspace]
+members = [".", "vector13d"]
+resolver = "2"
