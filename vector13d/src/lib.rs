@@ -13,7 +13,7 @@ pub enum GaugeCoupling { #[default] Static, Spinning, Oscillating }
 /// composition(6=truth_meter) resonance(7) ozone_buffer(8=lightness)
 /// domain_wall(9=connection) su2_polarity(10=hue) torsion(11=skew)
 /// gauge_coupling(12=rot) closure(13)
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Vector13D {
     pub amplitude: f64, pub frequency: f64, pub phase: f64, pub coherence: f64,
     pub entropy: f64, pub composition: f64, pub resonance: f64, pub ozone_buffer: f64,
@@ -39,8 +39,8 @@ impl Vector13D {
         else if p < 70.0   { "yellow" }
         else if p < 160.0  { "green" }
         else if p < 250.0  { "blue" }
-        else if p < 310.0  { "purple" }
-        else                 { "pink" }
+        else if p < 325.0  { "purple" }   // mystery, deep (250-325)
+        else                 { "pink" }   // love, warmth (325-360)
     }
     pub fn saturation(&self) -> f64 { self.composition * 100.0 }
     pub fn lightness(&self) -> f64 { 20.0 + self.ozone_buffer * 65.0 }
@@ -89,4 +89,107 @@ mod tests {
     #[test] fn test_class_string() { let v=Vector13D{su2_polarity:331.4,composition:0.8,ozone_buffer:0.6,torsion:-98.6,..Default::default()}; let c=v.class_string(); assert!(c.contains("v13d-")); assert!(c.contains("-h331-")); }
 
     #[test] fn test_serialization() { let v=Vector13D{domain_wall:DomainWall::Gradient,..Default::default()}; let j=serde_json::to_string(&v).unwrap(); eprintln!("json={}",j); assert!(j.contains(r#""Gradient""#)); let v2=Vector13D{domain_wall:DomainWall::Broken,..Default::default()}; let j2=serde_json::to_string(&v2).unwrap(); eprintln!("json2={}",j2); assert!(j2.contains(r#""Broken""#)); }
+}
+
+/// Observed n=1 baseline (post-dress, post-cycle) — living reference state.
+pub fn observed_n1() -> Vec<Vector13D> {
+    // Average across 61 segments of first recording
+    vec![
+        Vector13D { amplitude: 0.72, frequency: 1.0, phase: 180.0, coherence: 0.55, entropy: 0.08, composition: 0.78, resonance: 0.45, ozone_buffer: 0.40, domain_wall: DomainWall::Linked, su2_polarity: 331.4, torsion: -50.0, gauge_coupling: GaugeCoupling::Spinning, closure: 0.6 },
+    ]
+}
+
+/// Observed n=2 baseline (in shower) — living reference state.
+pub fn observed_n2() -> Vec<Vector13D> {
+    // Average across 24 segments of second recording
+    vec![
+        Vector13D { amplitude: 0.65, frequency: 0.57, phase: 200.0, coherence: 0.62, entropy: 0.03, composition: 0.85, resonance: 0.58, ozone_buffer: 0.31, domain_wall: DomainWall::Linked, su2_polarity: 320.0, torsion: -5.0, gauge_coupling: GaugeCoupling::Oscillating, closure: 0.75 },
+    ]
+}
+
+/// Compare two observed baselines — what shifted between states?
+pub fn compare_baselines(before: &Vector13D, after: &Vector13D) -> StateChange {
+    let hue_shift = if before.su2_polarity >= 325.0 && after.su2_polarity < 325.0 { "pink -> purple" }
+    else if before.su2_polarity < 325.0 && after.su2_polarity >= 325.0 { "purple -> pink" }
+    else { "same register" };
+
+    let torsion_became_near_zero = after.torsion.abs() < 10.0; // near upright axis
+    let domain_unchanged = before.domain_wall == after.domain_wall;
+    let coupling_shifted = before.gauge_coupling != after.gauge_coupling;
+
+    StateChange {
+        hue_shift: hue_shift.to_string(),
+        frequency_delta: after.frequency - before.frequency,
+        entropy_change_pct: (((after.entropy - before.entropy) / before.entropy) * 100.0).round() as i32,
+        coherence_delta: after.coherence - before.coherence,
+        torsion_became_near_zero: torsion_became_near_zero,
+          
+        domain_wall_unchanged: domain_unchanged,
+        gauge_coupling_shifted: coupling_shifted,
+        ozone_buffer_delta: after.ozone_buffer - before.ozone_buffer,
+    }
+}
+
+/// Summary of a state change between two Vector13D observations.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StateChange {
+    pub hue_shift: String,
+    pub frequency_delta: f64,
+    pub entropy_change_pct: i32,
+    pub coherence_delta: f64,
+    pub torsion_became_near_zero: bool,
+    pub domain_wall_unchanged: bool,
+    pub gauge_coupling_shifted: bool,
+    pub ozone_buffer_delta: f64,
+}
+
+#[cfg(test)]
+mod observed_tests {
+    use super::*;
+
+    #[test] fn test_n1_hue_is_pink() { let v = observed_n1()[0]; assert_eq!(v.hue(), "pink"); }
+    #[test] fn test_n2_hue_is_purple() { let v = observed_n2()[0]; assert_eq!(v.hue(), "purple"); }
+
+    #[test] fn test_domain_wall_constant() {
+        let n1 = &observed_n1()[0];
+        let n2 = &observed_n2()[0];
+        let change = compare_baselines(&n1, &n2);
+        assert!(change.domain_wall_unchanged, "domain wall should be constant across states");
+    }
+
+    #[test] fn test_entropy_dropped() {
+        let n1 = &observed_n1()[0];
+        let n2 = &observed_n2()[0];
+        let change = compare_baselines(&n1, &n2);
+        assert!(change.entropy_change_pct <= -55, "entropy should drop significantly (>55%%)")
+    }
+
+    #[test] fn test_torsion_nearly_zero() {
+        let n2 = &observed_n2()[0];
+        let change = compare_baselines(&observed_n1()[0], &n2);
+        assert!(change.torsion_became_near_zero, "torsion should approach zero in shower state");
+    }
+
+    #[test] fn test_gauge_coupling_shifts() {
+        let n1 = &observed_n1()[0];
+        let n2 = &observed_n2()[0];
+        assert_eq!(n1.gauge_coupling, GaugeCoupling::Spinning);
+        assert_eq!(n2.gauge_coupling, GaugeCoupling::Oscillating);
+        let change = compare_baselines(&n1, &n2);
+        assert!(change.gauge_coupling_shifted);
+    }
+
+    #[test] fn test_hue_shift_purple() {
+        let n1 = &observed_n1()[0];
+        let n2 = &observed_n2()[0];
+        let change = compare_baselines(&n1, &n2);
+        assert_eq!(change.hue_shift, "pink -> purple");
+    }
+
+    #[test] fn test_ozone_dropped() {
+        let n1 = &observed_n1()[0];
+        let n2 = &observed_n2()[0];
+        let change = compare_baselines(&n1, &n2);
+        assert!(change.ozone_buffer_delta < 0.0, "ozone should drop — energy went inward");
+    }
 }
