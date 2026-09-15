@@ -2,6 +2,8 @@
 
 > The authoritative implementation of Vector13D types, enum semantics, invariants, and validity checks for the Neural-Representation Boundary.
 
+> **Manifesto** — human energy can be used more efficiently with the assistance of geometry. Creativity as the harness, logic as the control.
+
 A Rust-based budget-aware multi-model orchestration runtime with reproducible traces, cross-model failure critique, and the canonical 13-dimensional state type that binds affective telemetry to text.
 
 ## Problem
@@ -171,6 +173,10 @@ Downstream repositories (`gradient-jelle`, `gradient-space-time`,
 codec-valid states. Learned predictions, database-derived patterns,
 and generated outputs are not authoritative and must be validated
 against the applicable pinned version of `gradient-codec`.
+
+## Contributions & Inspiration
+
+- **R.J.R.B** — the 13D vectors. The thirteen-field affective-telemetry concept that became `Vector13D`, and with it the geometry this entire runtime is built to serve.
 
 ## License
 
