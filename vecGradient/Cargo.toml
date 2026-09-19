@@ -1,9 +1,9 @@
 [package]
-name = "vector13d"
+name = "vecGradient"
 version = "0.1.0"
 edition = "2021"
 license = "PolyForm-Noncommercial-1.0.0"
-description = "Vector13D: the 13-field type that binds affective telemetry to text — weight, temperature, and axis preserved"
+description = "vecGradient: the canonical Vector15D type of the Gradient Codec — binds affective telemetry to text, weight/temperature/axis/magnetic poles preserved"
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
