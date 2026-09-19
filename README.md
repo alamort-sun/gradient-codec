@@ -81,7 +81,7 @@ Observed baselines (`observed_n1()`, `observed_n2()`) provide seed data from voi
 │              Benchmark Suite                           │
 │  (Quality-per-token · Successful-task-per-dollar)     │
 ├──────────────────────────────────────────────────────┤
-│              vector13d (canonical type)                │
+│              vecGradient (canonical type)              │
 │  Vector13D · DomainWall · GaugeCoupling · baselines   │
 └──────────────────────────────────────────────────────┘
 ```

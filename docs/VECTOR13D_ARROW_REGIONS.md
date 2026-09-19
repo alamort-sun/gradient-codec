@@ -1,7 +1,7 @@
 # Vector13D Arrow Regions
 
 > Regions of the 13-field state space, as defined against codec pin `9f4b4d5`
-> (`vector13d/src/lib.rs`). Field indices and aliases verified in source:
+> (`vecGradient/src/lib.rs`). Field indices and aliases verified in source:
 > amplitude(1) frequency(2) phase(3) coherence(4) entropy(5) composition(6=truth_meter)
 > resonance(7) ozone_buffer(8=lightness) domain_wall(9=connection) su2_polarity(10=hue)
 > torsion(11=skew) gauge_coupling(12=rot) closure(13).

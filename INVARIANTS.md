@@ -77,7 +77,7 @@ G = R^13 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 
 ## Observed baselines (seed data — from source, do not invent more)
 
-Source: `vector13d/src/lib.rs` — `observed_n1()` and `observed_n2()`.
+Source: `vecGradient/src/lib.rs` — `observed_n1()` and `observed_n2()`.
 
 For n1→n2 (post-album-cycle → post-shower):
 

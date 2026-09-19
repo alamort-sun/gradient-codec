@@ -29,5 +29,5 @@ name = "gradient-codec"
 path = "src/main.rs"
 
 [workspace]
-members = [".", "vector13d"]
+members = [".", "vecGradient"]
 resolver = "2"

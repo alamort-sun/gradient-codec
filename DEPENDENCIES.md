@@ -9,7 +9,7 @@ All crates below are dual-licensed **MIT OR Apache-2.0** under their upstream te
 - tokio 1.40, serde 1.0, serde_json 1.0, clap 4.5, reqwest 0.12, async-trait 0.1, uuid 1.10, chrono 0.4, sha2 0.10, hex 0.4, thiserror 1.0, tracing 0.1, tracing-subscriber 0.3
 - Dev: tokio-test 0.4, mockito 1.5
 
-## Crates (vector13d)
+## Crates (vecGradient)
 
 - serde 1.0, serde_json 1.0 (MIT OR Apache-2.0)
 
