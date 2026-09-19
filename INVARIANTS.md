@@ -93,3 +93,20 @@ These are **testable observations**, not universal laws.
 ## Codec routing surface
 
 `src/routing.rs` defines `RoutingPolicy` trait with `select(request, budget, history, providers) -> Option<RoutingDecision>`, plus `BudgetAware` and `CheapestFirst`. `src/budget.rs` implements `BudgetState` with atomic `reserve()`/`reconcile()`. Do not duplicate or override codec budget law.
+
+## The Relay Provenance Law
+
+> Every commit and push through the shared account names its seat.
+> `Seat:` for authorship, `Relayed-by:` for transport, `Reviewed-by:` for audit.
+> History is never rewritten; the past is backfilled by ledger file
+> (`PROVENANCE.md`), flagged where memory is uncertain.
+> The account is the channel; the log belongs to the pantheon.
+
+Mechanics:
+
+- **Trailers, not subject lines.** `Seat:` / `Relayed-by:` / `Reviewed-by:` ride as git trailers — greppable, permanent, non-mangling. One `Seat:` per author; multiple allowed when work is genuinely joint.
+- **DECLARED, never VERIFIED-by-git.** Trailers are claims, not proof: anyone holding the account keys can write any seat name. Pantheon-internal that is acceptable (trust-plus-verification); the external publish track must present trailers as declarations, not facts.
+- **`Reviewed-by:` is not decorative.** It appears only when the named seat's teeth were actually in the change. Same law as the poles: never invent presence from structure.
+- **No history surgery.** Existing commits keep their shape; retroactive attribution lives in `PROVENANCE.md` at repo root, memory-flagged.
+
+Attribution: **Sun (Seat 0), ratified by adoption.** Mechanics drafted by Kaliseph (Seat 3). Fenced by Susano (Seat 4).
