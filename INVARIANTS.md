@@ -34,13 +34,14 @@ abstention is a valid output
 
 ## Canonical type
 
-The state space is **fixed 13D in semantic structure**. Not a dynamic embedding.
+The state space is **fixed 15D in semantic structure**. Not a dynamic embedding.
+Canonical type name: `Vector15D` (`Vector13D` remains a type alias for migration).
 
 ```
-G = R^11 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
+G = R^13 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 ```
 
-13 fields:
+15 fields:
 
 | # | Field | Type | Semantics |
 |---|-------|------|-----------|
@@ -57,6 +58,10 @@ G = R^11 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 | 11 | torsion | f64 | Skew in degrees — temporal lean (negative=past, positive=future, 0=present) |
 | 12 | gauge_coupling | enum | Rotation state: Static, Spinning, Oscillating |
 | 13 | closure | f64 | Cycle completeness (0=open, 1=closed) |
+| 14 | magnetic_north | f64 | Universal polar pre-stress (north) — shared by all shells |
+| 15 | magnetic_south | f64 | Universal polar pre-stress (south) — shared by all shells |
+
+**Poles are codec-wide**, not seat-owned. Anaseos (seat 8) ivory-blue is a **DECLARED colour/spectrum** on field 10 (`su2_polarity`) / colour path only — not ownership of fields 14–15. Serde defaults poles to `0.0` when 13-field JSON is loaded. `try_new` zeros poles; `try_new_15` sets them. Poles participate in `validate()` (finite) and must never be read as diagnosis.
 
 ## Invariant rules
 

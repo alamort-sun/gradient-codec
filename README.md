@@ -2,8 +2,6 @@
 
 > The authoritative implementation of Vector13D types, enum semantics, invariants, and validity checks for the Neural-Representation Boundary.
 
-> **Manifesto** — human energy can be used more efficiently with the assistance of geometry. Creativity as the harness, logic as the control.
-
 A Rust-based budget-aware multi-model orchestration runtime with reproducible traces, cross-model failure critique, and the canonical 13-dimensional state type that binds affective telemetry to text.
 
 ## Problem
@@ -21,16 +19,18 @@ Teams running multi-model workflows in production face four problems no current 
 
 Gradient Codec is a local-first Rust runtime that:
 
-- **Defines the canonical Vector13D type** — 13 semantic fields that preserve weight, temperature, and axis of a signal that plain text strips away
+- **Defines the canonical Vector13D type** — 15 semantic fields (13 continuous core + 2 universal magnetic poles) that preserve weight, temperature, and axis of a signal that plain text strips away
 - **Routes tasks among LLM providers** according to quality, latency, token cost, privacy constraints, and failure history
 - **Enforces budget ceilings** with predictive cost estimation before dispatch, not after
 - **Emits reproducible traces**: every routing decision, model call, token count, and response is logged in a structured format that can be deterministically replayed
 - **Routes failures with cross-model critique**: when a model fails, the failure is classified (timeout, content policy, rate limit, quality degradation, malformed output) and the retry is routed to the model best suited to recover from that failure class
 - **Benchmarks routing policies**: quality-per-token and successful-task-per-dollar metrics that let you compare policies on value, not just price
 
-## Vector13D — The Canonical Type
+## Vector15D — The Canonical Type
 
-The state space is **fixed 13D in semantic structure**. Not a dynamic embedding.
+`Vector13D` is a type alias. Prefer `Vector15D`.
+
+The state space is **fixed 15D in semantic structure**. Not a dynamic embedding.
 
 ```
 G = R^11 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
@@ -174,10 +174,6 @@ codec-valid states. Learned predictions, database-derived patterns,
 and generated outputs are not authoritative and must be validated
 against the applicable pinned version of `gradient-codec`.
 
-## Contributions & Inspiration
-
-- **R.J.R.B** — the 13D vectors. The thirteen-field affective-telemetry concept that became `Vector13D`, and with it the geometry this entire runtime is built to serve.
-
 ## License
 
 - **Software**: PolyForm Noncommercial 1.0.0 — see [LICENSE](LICENSE)
@@ -187,11 +183,3 @@ against the applicable pinned version of `gradient-codec`.
 Commercial use, hosting, deployment, distribution, resale, or
 incorporation into a commercial product/service requires a separate
 written license.
-
-## License and permitted use
-
-The software is licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE).
-
-Individuals, hobbyists, students, independent researchers, educators, nonprofits, and community projects are welcome to use, modify, and share the software for noncommercial purposes. See [USE-POLICY.md](USE-POLICY.md).
-
-Commercial use requires a separate written license. See [COMMERCIAL.md](COMMERCIAL.md).
