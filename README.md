@@ -1,8 +1,15 @@
 # Gradient Codec
 
-> The authoritative implementation of Vector13D types, enum semantics, invariants, and validity checks for the Neural-Representation Boundary.
+> Workspace for the Neural-Representation Boundary: geometry law in `vecGradient`, budgeted LLM orchestration in the `gradient-codec` bin.
 
-A Rust-based budget-aware multi-model orchestration runtime with reproducible traces, cross-model failure critique, and the canonical 13-dimensional state type that binds affective telemetry to text.
+Two planes share this repo. Do not confuse them:
+
+| Plane | Package / bin | Role |
+|-------|---------------|------|
+| **Geometry** | `vecGradient` / `v15d` | Canonical `Vector15D`, `validate()`, serialize — steel downstream cores pin |
+| **Orchestration** | `gradient-codec` / `gradient-codec` | Budget-aware multi-model router, traces, critique — **does not link `vecGradient`** |
+
+A Rust workspace: the root package is a budget-aware multi-model orchestration runtime with reproducible traces and cross-model failure critique. Canonical geometry lives in the `vecGradient` member (see [INVARIANTS.md](INVARIANTS.md)).
 
 ## Problem
 
@@ -15,16 +22,25 @@ Teams running multi-model workflows in production face four problems no current 
 3. **Failure handling is single-hop.** If model A fails, routers fall back to model B. They don't critique *why* A failed and route the retry to the model best suited to recover from that specific failure class.
 4. **No quality-per-token benchmark.** Routers measure latency and cost. They don't measure quality outcomes per token spent, so you can't compare routing policies on value, only on price.
 
-## What Gradient Codec Does
+## Plane split (P0.3)
 
-Gradient Codec is a local-first Rust runtime that:
+- **Orchestration plane** — package `gradient-codec`, bin `gradient-codec`: budgeted LLM router. **does not link `vecGradient`**. Claiming geometry from this bin without calling the steel crate is theater; fail-when tests in `src/plane.rs` seal that.
+- **Geometry plane** — package `vecGradient`, bin `v15d`: `Vector15D` / `validate` / serialize. Downstream (`gradient-jelle`, `gradient-space-time`, …) path-pin this member.
 
-- **Defines the canonical Vector13D type** — 15 semantic fields (13 continuous core + 2 universal magnetic poles) that preserve weight, temperature, and axis of a signal that plain text strips away
+## What this workspace does
+
+**Orchestration (`gradient-codec` bin):**
+
 - **Routes tasks among LLM providers** according to quality, latency, token cost, privacy constraints, and failure history
 - **Enforces budget ceilings** with predictive cost estimation before dispatch, not after
 - **Emits reproducible traces**: every routing decision, model call, token count, and response is logged in a structured format that can be deterministically replayed
 - **Routes failures with cross-model critique**: when a model fails, the failure is classified (timeout, content policy, rate limit, quality degradation, malformed output) and the retry is routed to the model best suited to recover from that failure class
 - **Benchmarks routing policies**: quality-per-token and successful-task-per-dollar metrics that let you compare policies on value, not just price
+
+**Geometry (`vecGradient` / `v15d`):**
+
+- **Defines the canonical Vector15D type** — 15 semantic fields (13 continuous core + 2 universal magnetic poles) that preserve weight, temperature, and axis of a signal that plain text strips away
+- **Validates and serializes** codec-valid state for non-Rust callers via `v15d`
 
 ## Vector15D — The Canonical Type
 
@@ -62,35 +78,26 @@ Observed baselines (`observed_n1()`, `observed_n2()`) provide seed data from voi
 
 ```
 ┌──────────────────────────────────────────────────────┐
-│                    CLI / API Layer                     │
-│         (gradient-codec CLI + HTTP server)            │
-├──────────────────────────────────────────────────────┤
-│              Orchestration Engine                      │
-│  ┌──────────┐  ┌──────────┐  ┌──────────────────┐    │
-│  │ Budget   │  │ Routing  │  │ Failure Critique │    │
-│  │ Manager  │  │ Policy   │  │ Classifier        │    │
-│  └──────────┘  └──────────┘  └──────────────────┘    │
-├──────────────────────────────────────────────────────┤
-│              Provider Adapters                         │
-│  OpenAI · Anthropic · Gemini · DeepSeek · Groq ·     │
-│  Ollama · Cohere · vLLM · Custom OpenAI-compatible    │
-├──────────────────────────────────────────────────────┤
-│              Trace + Replay Layer                      │
-│  (Structured JSON traces · Deterministic replay)      │
-├──────────────────────────────────────────────────────┤
-│              Benchmark Suite                           │
-│  (Quality-per-token · Successful-task-per-dollar)     │
-├──────────────────────────────────────────────────────┤
-│              vecGradient (canonical type)              │
-│  Vector13D · DomainWall · GaugeCoupling · baselines   │
+│         Orchestration plane (bin: gradient-codec)      │
+│  CLI · Budget · Routing · Critique · Trace · Bench   │
+│  Provider adapters (OpenAI · Anthropic · Ollama · …) │
+│              ⟂ does not link vecGradient              │
+└──────────────────────────────────────────────────────┘
+
+┌──────────────────────────────────────────────────────┐
+│         Geometry plane (crate: vecGradient)            │
+│  Vector15D · DomainWall · GaugeCoupling · validate() │
+│  CLI bridge: v15d (stdio normalize / validate / …)   │
+│  ← pinned by jelle / space-time / speak              │
 └──────────────────────────────────────────────────────┘
 ```
 
 ## Quick Start
 
 ```bash
-# Install
+# Orchestration CLI (router plane)
 cargo install gradient-codec
+# Geometry CLI (from workspace): cargo run -p vecGradient --bin v15d -- validate
 
 # Route a single completion with a budget ceiling
 gradient-codec run --prompt "Summarize this article" --budget 0.05
@@ -154,7 +161,7 @@ budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 - [x] One benchmark suite (quality-per-token, successful-task-per-dollar)
 - [x] CLI + minimal HTTP API layer
 - [x] Adapters: OpenAI, Anthropic, Ollama (local), one OpenAI-compatible custom
-- [x] Vector13D canonical type with observed baselines
+- [x] Geometry plane sealed in `vecGradient` (Vector15D + `v15d`); router does not link it
 
 ## Roadmap
 
@@ -165,14 +172,16 @@ budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 
 ## Authority Boundary
 
-`gradient-codec` is the authoritative implementation of Vector13D
-types, enum semantics, invariants, and validity checks.
+This **repository** is the codec authority. Steel lives in crate
+`vecGradient` (`Vector15D`, enum semantics, `validate()`). The root
+`gradient-codec` package is the orchestration runtime only — it does
+not define or link geometry.
 
 Downstream repositories (`gradient-jelle`, `gradient-space-time`,
 `gradient-speak`) may learn from, store, query, route, or render
 codec-valid states. Learned predictions, database-derived patterns,
 and generated outputs are not authoritative and must be validated
-against the applicable pinned version of `gradient-codec`.
+against the applicable pinned commit of `vecGradient` in this repo.
 
 ## License
 

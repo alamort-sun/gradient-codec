@@ -4,6 +4,11 @@
 
 ## Crates (workspace root — gradient-codec)
 
+> P0.3 plane split: the root package is the orchestration runtime only.
+> It must **not** depend on `vecGradient`. Geometry consumers path-pin
+> `../gradient-codec/vecGradient` (bin `v15d`), not this router crate.
+
+
 All crates below are dual-licensed **MIT OR Apache-2.0** under their upstream terms. Versions are minimums from `Cargo.toml`; consult `Cargo.lock` for exact resolved versions.
 
 - tokio 1.40, serde 1.0, serde_json 1.0, clap 4.5, reqwest 0.12, async-trait 0.1, uuid 1.10, chrono 0.4, sha2 0.10, hex 0.4, thiserror 1.0, tracing 0.1, tracing-subscriber 0.3

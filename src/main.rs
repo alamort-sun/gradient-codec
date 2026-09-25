@@ -8,6 +8,7 @@ mod trace;
 mod critique;
 mod benchmark;
 mod cli;
+mod plane;
 
 use cli::{Cli, Commands};
 
@@ -23,7 +24,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Run { prompt, budget, policy, provider } => {
+        Commands::Run {
+            prompt,
+            budget,
+            policy,
+            provider,
+        } => {
             cli::run_command(prompt, budget, policy, provider).await?;
         }
         Commands::Replay { trace } => {
