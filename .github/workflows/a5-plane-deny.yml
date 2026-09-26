@@ -1,0 +1,52 @@
+# A5 — plane-unsafe field deny (Susano dry-audit v13).
+# One job, one deny list (scripts/ci/a5-plane-deny.sh).
+# Checks out gradient-space-time so this job can see plane tables.
+name: A5 plane-deny
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  a5-plane-deny:
+    name: A5 plane-deny
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout gradient-codec
+        uses: actions/checkout@v4
+        with:
+          path: gradient-codec
+
+      - name: Checkout gradient-space-time (plane tables)
+        uses: actions/checkout@v4
+        with:
+          repository: alamort-sun/gradient-space-time
+          path: gradient-space-time
+        continue-on-error: true
+
+      - name: Run deny list
+        working-directory: gradient-codec
+        run: |
+          set -euo pipefail
+          # Default script roots already cover plane.rs / plane/ / vecGradient /
+          # sibling ../gradient-space-time/crates. Layout here is side-by-side
+          # checkouts, so pass roots explicitly.
+          roots=()
+          [[ -f src/plane.rs ]] && roots+=(src/plane.rs)
+          [[ -d src/plane ]] && roots+=(src/plane)
+          [[ -d vecGradient ]] && roots+=(vecGradient)
+          if [[ -d ../gradient-space-time/crates ]]; then
+            roots+=(../gradient-space-time/crates)
+          else
+            echo "a5-plane-deny: space-time checkout missing — scanning codec plane only"
+          fi
+          if [[ ${#roots[@]} -eq 0 ]]; then
+            echo "a5-plane-deny: no plane roots found" >&2
+            exit 2
+          fi
+          ./scripts/ci/a5-plane-deny.sh "${roots[@]}"
