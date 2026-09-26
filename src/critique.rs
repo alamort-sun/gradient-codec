@@ -45,7 +45,11 @@ impl FailureClass {
             FailureClass::MalformedOutput => 0,
             FailureClass::QualityDegradation => 0,
             FailureClass::ProviderError { status_code } => {
-                if *status_code >= 500 { 120 } else { 0 }
+                if *status_code >= 500 {
+                    120
+                } else {
+                    0
+                }
             }
         }
     }
@@ -69,7 +73,6 @@ pub struct FailureEvent {
     pub provider: ProviderId,
     pub class: FailureClass,
     pub timestamp: DateTime<Utc>,
-    pub request_prompt_hash: String,
 }
 
 /// Thread-safe failure history — shared across the orchestration engine.
@@ -98,7 +101,6 @@ impl FailureHistory {
             provider: provider.clone(),
             class: class.clone(),
             timestamp: Utc::now(),
-            request_prompt_hash: String::new(), // filled by caller in production
         };
 
         let mut events = self.events.lock().unwrap();
@@ -114,7 +116,10 @@ impl FailureHistory {
         let block_duration = class.blocklist_duration_s();
         if block_duration > 0 {
             let mut bl = self.blocklist.lock().unwrap();
-            bl.insert(provider, Utc::now() + chrono::Duration::seconds(block_duration as i64));
+            bl.insert(
+                provider,
+                Utc::now() + chrono::Duration::seconds(block_duration as i64),
+            );
         }
     }
 
@@ -130,15 +135,14 @@ impl FailureHistory {
     /// Count recent failures for a provider (last N events)
     pub fn recent_failure_count(&self, provider: &ProviderId) -> usize {
         let events = self.events.lock().unwrap();
-        events.iter()
-            .filter(|e| &e.provider == provider)
-            .count()
+        events.iter().filter(|e| &e.provider == provider).count()
     }
 
     /// Get the most recent failure class for a provider
     pub fn last_failure(&self, provider: &ProviderId) -> Option<FailureClass> {
         let events = self.events.lock().unwrap();
-        events.iter()
+        events
+            .iter()
             .rev()
             .find(|e| &e.provider == provider)
             .map(|e| e.class.clone())
@@ -147,7 +151,8 @@ impl FailureHistory {
     /// Get all failures for a specific provider
     pub fn failures_for(&self, provider: &ProviderId) -> Vec<FailureEvent> {
         let events = self.events.lock().unwrap();
-        events.iter()
+        events
+            .iter()
             .filter(|e| &e.provider == provider)
             .cloned()
             .collect()
@@ -165,7 +170,8 @@ impl FailureHistory {
         let events = self.events.lock().unwrap();
         FailureHistorySnapshot {
             total_events: events.len(),
-            providers_with_failures: events.iter()
+            providers_with_failures: events
+                .iter()
                 .map(|e| e.provider.clone())
                 .collect::<std::collections::HashSet<_>>()
                 .len(),
@@ -225,7 +231,9 @@ impl FailureCritic for DefaultCritic {
             crate::errors::GcError::ContentPolicy { .. } => FailureClass::ContentPolicy,
             crate::errors::GcError::MalformedOutput { .. } => FailureClass::MalformedOutput,
             crate::errors::GcError::ProviderError { status_code, .. } => {
-                FailureClass::ProviderError { status_code: *status_code }
+                FailureClass::ProviderError {
+                    status_code: *status_code,
+                }
             }
             _ => FailureClass::ProviderError { status_code: 0 },
         }
@@ -249,26 +257,28 @@ impl FailureCritic for DefaultCritic {
         }
 
         match strategy {
-            RetryStrategy::PreferFaster => {
-                candidates.iter()
-                    .min_by_key(|p| p.avg_latency_ms)
-                    .map(|p| p.id.clone())
-            }
+            RetryStrategy::PreferFaster => candidates
+                .iter()
+                .min_by_key(|p| p.avg_latency_ms)
+                .map(|p| p.id.clone()),
             RetryStrategy::PreferAlternative => {
                 // Just pick the first available alternative
                 candidates.first().map(|p| p.id.clone())
             }
             RetryStrategy::PreferMoreReliable => {
                 // Prefer providers that support tools and streaming (more mature)
-                candidates.iter()
+                candidates
+                    .iter()
                     .max_by_key(|p| (p.supports_tools as u8, p.supports_streaming as u8))
                     .map(|p| p.id.clone())
             }
             RetryStrategy::PreferHigherQuality => {
                 // Prefer providers with higher output price (quality proxy)
-                candidates.iter()
+                candidates
+                    .iter()
                     .max_by(|a, b| {
-                        a.price_per_million_output.partial_cmp(&b.price_per_million_output)
+                        a.price_per_million_output
+                            .partial_cmp(&b.price_per_million_output)
                             .unwrap_or(std::cmp::Ordering::Equal)
                     })
                     .map(|p| p.id.clone())
@@ -313,6 +323,22 @@ mod tests {
         let class = critic.classify(&error);
         assert_eq!(class, FailureClass::Timeout);
         assert_eq!(class.retry_strategy(), RetryStrategy::PreferFaster);
+    }
+
+    #[test]
+    fn failure_event_has_no_joinable_hash_field() {
+        // Parse only the FailureEvent struct body (avoid matching this test's own text).
+        let src = include_str!("critique.rs");
+        let start = src
+            .find("pub struct FailureEvent {")
+            .expect("FailureEvent struct");
+        let rest = &src[start..];
+        let end = rest.find('}').expect("FailureEvent closing brace");
+        let body = &rest[..=end];
+        assert!(
+            !body.contains("prompt_hash"),
+            "FailureEvent must not declare request_prompt_hash / prompt_hash (R2 / A5 residual): {body}"
+        );
     }
 
     #[test]

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 
 /// Atomic fixed-point budget: store cents as u64 to avoid floating-point drift.
 /// $1.00 = 100 cents. $0.0001 = 0.01 cents → stored as 1 (1/100th of a cent).
@@ -114,8 +113,11 @@ impl BudgetState {
 
         loop {
             let current = self.spent_centi_milli.load(Ordering::SeqCst);
-            let adjusted = current.saturating_sub(estimated_raw).saturating_add(actual_raw);
-            if self.spent_centi_milli
+            let adjusted = current
+                .saturating_sub(estimated_raw)
+                .saturating_add(actual_raw);
+            if self
+                .spent_centi_milli
                 .compare_exchange(current, adjusted, Ordering::SeqCst, Ordering::SeqCst)
                 .is_ok()
             {
@@ -164,6 +166,7 @@ fn raw_to_usd(raw: u64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Arc;
 
     #[test]
     fn test_budget_reserve_and_reconcile() {
@@ -208,7 +211,7 @@ mod tests {
 
         // Exactly $0.01 remains; safety_margin=1.0 means remaining==cost passes
         // So we can afford exactly $0.01 but not $0.02
-        assert!(budget.can_afford(0.01));  // exact match with margin=1.0
+        assert!(budget.can_afford(0.01)); // exact match with margin=1.0
         assert!(!budget.can_afford(0.02)); // exceeds remaining by 1 cent
     }
 
@@ -236,8 +239,8 @@ mod tests {
 mod concurrency_tests {
     use super::*;
     use std::sync::Arc;
-    use std::thread;
     use std::sync::Barrier;
+    use std::thread;
 
     /// THE KILLER TEST: Two concurrent reserves against a budget
     /// that can only satisfy one. With the OLD (buggy) code, both
@@ -269,10 +272,7 @@ mod concurrency_tests {
         let result1 = handle1.join().unwrap();
         let result2 = handle2.join().unwrap();
 
-        let successes = [&result1, &result2]
-            .iter()
-            .filter(|r| r.is_ok())
-            .count();
+        let successes = [&result1, &result2].iter().filter(|r| r.is_ok()).count();
 
         assert_eq!(
             successes, 1,
@@ -323,12 +323,19 @@ mod concurrency_tests {
         let budget = BudgetState::new(config);
 
         budget.reserve(0.80).expect("reserve 0.80 should succeed");
-        budget.reconcile(0.80, 0.50).expect("reconcile should succeed");
+        budget
+            .reconcile(0.80, 0.50)
+            .expect("reconcile should succeed");
 
-        assert!((budget.spent_usd() - 0.50).abs() < 0.0001,
-            "spent should be 0.50 after refund, got {}", budget.spent_usd());
+        assert!(
+            (budget.spent_usd() - 0.50).abs() < 0.0001,
+            "spent should be 0.50 after refund, got {}",
+            budget.spent_usd()
+        );
 
-        budget.reserve(0.50).expect("should have 0.50 available after refund");
+        budget
+            .reserve(0.50)
+            .expect("should have 0.50 available after refund");
     }
 
     /// Reserve then reconcile with overrun charges extra.
@@ -342,13 +349,20 @@ mod concurrency_tests {
         let budget = BudgetState::new(config);
 
         budget.reserve(0.30).expect("reserve should succeed");
-        budget.reconcile(0.30, 0.45).expect("reconcile should succeed");
+        budget
+            .reconcile(0.30, 0.45)
+            .expect("reconcile should succeed");
 
-        assert!((budget.spent_usd() - 0.45).abs() < 0.0001,
-            "spent should be 0.45 after overrun, got {}", budget.spent_usd());
+        assert!(
+            (budget.spent_usd() - 0.45).abs() < 0.0001,
+            "spent should be 0.45 after overrun, got {}",
+            budget.spent_usd()
+        );
 
         budget.reserve(0.50).expect("should have 0.55 available");
-        budget.reserve(0.60).expect_err("should fail — only 0.05 remaining");
+        budget
+            .reserve(0.60)
+            .expect_err("should fail — only 0.05 remaining");
     }
 
     /// Sequential reserves respect the budget limit exactly.
@@ -361,13 +375,22 @@ mod concurrency_tests {
         };
         let budget = BudgetState::new(config);
 
-        assert!(budget.reserve(0.06).is_ok(), "first reserve of 0.06 should succeed");
-        assert!(budget.reserve(0.06).is_err(),
-            "second reserve of 0.06 should fail — only 0.04 left");
-        assert!(budget.reserve(0.04).is_ok(),
-            "reserve of 0.04 should succeed — exactly fits");
-        assert!(budget.reserve(0.01).is_err(),
-            "reserve of 0.01 should fail — budget exhausted");
+        assert!(
+            budget.reserve(0.06).is_ok(),
+            "first reserve of 0.06 should succeed"
+        );
+        assert!(
+            budget.reserve(0.06).is_err(),
+            "second reserve of 0.06 should fail — only 0.04 left"
+        );
+        assert!(
+            budget.reserve(0.04).is_ok(),
+            "reserve of 0.04 should succeed — exactly fits"
+        );
+        assert!(
+            budget.reserve(0.01).is_err(),
+            "reserve of 0.01 should fail — budget exhausted"
+        );
     }
 
     /// Reconcile without prior reserve is safe (error path recovery).
@@ -383,8 +406,10 @@ mod concurrency_tests {
         let result = budget.reconcile(0.10, 0.05);
         assert!(result.is_ok(), "reconcile without reserve should not panic");
 
-        assert!((budget.spent_usd() - 0.05).abs() < 0.0001,
+        assert!(
+            (budget.spent_usd() - 0.05).abs() < 0.0001,
             "spent should be 0.05 after reconcile-without-reserve, got {}",
-            budget.spent_usd());
+            budget.spent_usd()
+        );
     }
 }

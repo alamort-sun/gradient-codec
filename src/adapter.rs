@@ -1,7 +1,7 @@
+use crate::errors::{GcError, GcResult};
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use crate::errors::{GcError, GcResult};
 
 /// A provider identifier: e.g. "anthropic/claude-sonnet", "openai/gpt-4o-mini"
 #[derive(Debug, Clone, Hash, PartialEq, Eq, Serialize, Deserialize)]
@@ -63,8 +63,10 @@ pub struct TokenUsage {
 impl TokenUsage {
     /// Calculate cost in USD given provider pricing
     pub fn cost_usd(&self, provider: &ProviderInfo) -> f64 {
-        let input_cost = (self.input_tokens as f64 / 1_000_000.0) * provider.price_per_million_input;
-        let output_cost = (self.output_tokens as f64 / 1_000_000.0) * provider.price_per_million_output;
+        let input_cost =
+            (self.input_tokens as f64 / 1_000_000.0) * provider.price_per_million_input;
+        let output_cost =
+            (self.output_tokens as f64 / 1_000_000.0) * provider.price_per_million_output;
         input_cost + output_cost
     }
 }
@@ -88,7 +90,11 @@ pub trait ProviderAdapter: Send + Sync {
     /// Default: rough heuristic (4 chars ≈ 1 token). Override for provider-specific tokenizers.
     fn estimate_input_tokens(&self, request: &CompletionRequest) -> u32 {
         let char_count = request.prompt.chars().count()
-            + request.system.as_ref().map(|s| s.chars().count()).unwrap_or(0);
+            + request
+                .system
+                .as_ref()
+                .map(|s| s.chars().count())
+                .unwrap_or(0);
         ((char_count as f64) / 4.0).ceil() as u32
     }
 
@@ -96,7 +102,8 @@ pub trait ProviderAdapter: Send + Sync {
     fn estimate_cost(&self, request: &CompletionRequest) -> f64 {
         let input_tokens = self.estimate_input_tokens(request);
         let input_cost = (input_tokens as f64 / 1_000_000.0) * self.info().price_per_million_input;
-        let output_cost = (request.max_tokens as f64 / 1_000_000.0) * self.info().price_per_million_output;
+        let output_cost =
+            (request.max_tokens as f64 / 1_000_000.0) * self.info().price_per_million_output;
         input_cost + output_cost
     }
 }
@@ -132,6 +139,40 @@ impl AdapterRegistry {
 }
 
 // ─── OpenAI Adapter ───────────────────────────────────────────
+
+/// Map a failed HTTP response to a `GcError` variant the failure critic can classify.
+/// 429/529 → RateLimited (Retry-After backoff); content-filter rejection →
+/// ContentPolicy; an unparseable body → MalformedOutput; everything else → ProviderError
+/// carrying the status code.
+pub fn classify_http_error(
+    provider: &str,
+    status: u16,
+    body: &str,
+    retry_after: Option<u64>,
+) -> GcError {
+    let lower = body.to_lowercase();
+    if status == 429 || status == 529 {
+        return GcError::RateLimited {
+            provider: provider.to_string(),
+            retry_after_s: retry_after.unwrap_or(60),
+        };
+    }
+    if lower.contains("content_policy")
+        || lower.contains("content policy")
+        || lower.contains("content_filter")
+        || lower.contains("refusal")
+    {
+        return GcError::ContentPolicy {
+            provider: provider.to_string(),
+            reason: body.chars().take(240).collect(),
+        };
+    }
+    GcError::ProviderError {
+        provider: provider.to_string(),
+        message: body.to_string(),
+        status_code: status,
+    }
+}
 
 pub mod openai {
     use super::*;
@@ -191,18 +232,25 @@ pub mod openai {
 
             let status = resp.status();
             if !status.is_success() {
+                let retry_after = resp
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
                 let text = resp.text().await.unwrap_or_default();
-                return Err(GcError::ProviderError {
-                    provider: "openai".into(),
-                    message: text,
-                    status_code: status.as_u16(),
-                });
+                return Err(super::classify_http_error(
+                    "openai",
+                    status.as_u16(),
+                    &text,
+                    retry_after,
+                ));
             }
 
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| GcError::Adapter(format!("OpenAI parse failed: {e}")))?;
+            let json: serde_json::Value =
+                resp.json().await.map_err(|e| GcError::MalformedOutput {
+                    provider: "openai".to_string(),
+                    detail: format!("OpenAI parse failed: {e}"),
+                })?;
 
             let text = json["choices"][0]["message"]["content"]
                 .as_str()
@@ -299,18 +347,25 @@ pub mod anthropic {
 
             let status = resp.status();
             if !status.is_success() {
+                let retry_after = resp
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
                 let text = resp.text().await.unwrap_or_default();
-                return Err(GcError::ProviderError {
-                    provider: "anthropic".into(),
-                    message: text,
-                    status_code: status.as_u16(),
-                });
+                return Err(super::classify_http_error(
+                    "anthropic",
+                    status.as_u16(),
+                    &text,
+                    retry_after,
+                ));
             }
 
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| GcError::Adapter(format!("Anthropic parse failed: {e}")))?;
+            let json: serde_json::Value =
+                resp.json().await.map_err(|e| GcError::MalformedOutput {
+                    provider: "anthropic".to_string(),
+                    detail: format!("Anthropic parse failed: {e}"),
+                })?;
 
             let text = json["content"][0]["text"]
                 .as_str()
@@ -394,18 +449,25 @@ pub mod ollama {
 
             let status = resp.status();
             if !status.is_success() {
+                let retry_after = resp
+                    .headers()
+                    .get("retry-after")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
                 let text = resp.text().await.unwrap_or_default();
-                return Err(GcError::ProviderError {
-                    provider: "ollama".into(),
-                    message: text,
-                    status_code: status.as_u16(),
-                });
+                return Err(super::classify_http_error(
+                    "ollama",
+                    status.as_u16(),
+                    &text,
+                    retry_after,
+                ));
             }
 
-            let json: serde_json::Value = resp
-                .json()
-                .await
-                .map_err(|e| GcError::Adapter(format!("Ollama parse failed: {e}")))?;
+            let json: serde_json::Value =
+                resp.json().await.map_err(|e| GcError::MalformedOutput {
+                    provider: "ollama".to_string(),
+                    detail: format!("Ollama parse failed: {e}"),
+                })?;
 
             let text = json["message"]["content"]
                 .as_str()
@@ -427,6 +489,54 @@ pub mod ollama {
                 latency_ms: start.elapsed().as_millis() as u64,
                 raw_provider_response: Some(json),
             })
+        }
+    }
+}
+
+#[cfg(test)]
+mod error_map_tests {
+    use super::classify_http_error;
+
+    #[test]
+    fn maps_429_to_ratelimited_with_backoff() {
+        match classify_http_error("llm", 429, "too many requests", Some(120)) {
+            crate::errors::GcError::RateLimited {
+                provider,
+                retry_after_s,
+            } => {
+                assert_eq!(provider.as_str(), "llm");
+                assert_eq!(retry_after_s, 120u64);
+            }
+            other => panic!("expected RateLimited, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_529_to_ratelimited_default_backoff() {
+        match classify_http_error("llm", 529, "overloaded", None) {
+            crate::errors::GcError::RateLimited { retry_after_s, .. } => {
+                assert_eq!(retry_after_s, 60u64)
+            }
+            _ => panic!("expected RateLimited for 529"),
+        }
+    }
+
+    #[test]
+    fn maps_content_filter_to_content_policy() {
+        let body = "code content_policy violation";
+        match classify_http_error("llm", 400, body, None) {
+            crate::errors::GcError::ContentPolicy { .. } => {}
+            _ => panic!("expected ContentPolicy"),
+        }
+    }
+
+    #[test]
+    fn maps_nonpolicy_4xx_to_provider_error() {
+        match classify_http_error("llm", 400, "plain 400 error", None) {
+            crate::errors::GcError::ProviderError { status_code, .. } => {
+                assert_eq!(status_code, 400u16)
+            }
+            _ => panic!("expected ProviderError for non-policy 4xx"),
         }
     }
 }

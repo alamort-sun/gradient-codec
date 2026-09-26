@@ -18,7 +18,7 @@ use crate::budget::{BudgetConfig, BudgetState};
 use crate::critique::{DefaultCritic, FailureCritic, FailureHistory};
 use crate::routing::RoutingPolicy;
 
-use super::{BenchmarkComparison, PolicyBenchmark, BenchmarkTask};
+use super::{BenchmarkComparison, BenchmarkTask, PolicyBenchmark};
 
 /// Live benchmark: run each policy over the task suite with fresh budget + history.
 pub async fn run_live_benchmark(
@@ -71,14 +71,21 @@ pub async fn run_live_benchmark(
             let decision = match policy.select(&request, &budget, &history, &providers) {
                 Some(d) => d,
                 None => {
-                    println!("  task {}: no provider affordable — counted as failed", i + 1);
+                    println!(
+                        "  task {}: no provider affordable — counted as failed",
+                        i + 1
+                    );
                     continue;
                 }
             };
             let adapter = match registry.get(&decision.provider) {
                 Some(a) => a,
                 None => {
-                    println!("  task {}: provider {:?} vanished", i + 1, decision.provider);
+                    println!(
+                        "  task {}: provider {:?} vanished",
+                        i + 1,
+                        decision.provider
+                    );
                     continue;
                 }
             };
@@ -110,7 +117,11 @@ pub async fn run_live_benchmark(
 
                     println!(
                         "  task {}: ok → {}  ${:.4}  {}ms  q={:.2}",
-                        i + 1, decision.provider, actual, latency, quality
+                        i + 1,
+                        decision.provider,
+                        actual,
+                        latency,
+                        quality
                     );
                 }
                 Err(e) => {
@@ -122,9 +133,21 @@ pub async fn run_live_benchmark(
             }
         }
 
-        let avg_quality = if successful > 0 { quality_sum / successful as f64 } else { 0.0 };
-        let avg_latency = if successful > 0 { total_latency_ms as f64 / successful as f64 } else { 0.0 };
-        let avg_tokens = if successful > 0 { total_tokens as f64 / successful as f64 } else { 0.0 };
+        let avg_quality = if successful > 0 {
+            quality_sum / successful as f64
+        } else {
+            0.0
+        };
+        let avg_latency = if successful > 0 {
+            total_latency_ms as f64 / successful as f64
+        } else {
+            0.0
+        };
+        let avg_tokens = if successful > 0 {
+            total_tokens as f64 / successful as f64
+        } else {
+            0.0
+        };
 
         benchmarks.push(PolicyBenchmark {
             policy_name: (*name).to_string(),
@@ -136,19 +159,32 @@ pub async fn run_live_benchmark(
             avg_latency_ms: avg_latency,
             quality_per_token: if avg_tokens > 0.0 {
                 avg_quality / (avg_tokens / 1000.0)
-            } else { 0.0 },
+            } else {
+                0.0
+            },
             tasks_per_dollar: if total_cost > 0.0 {
                 successful as f64 / total_cost
-            } else { 0.0 },
+            } else {
+                0.0
+            },
         });
 
-        println!("  ⇒ {}/{} ok, ${:.4}, q/tok {:.4}, tasks/$ {:.2}\n",
-            successful, tasks.len(), total_cost,
-            benchmarks.last().map(|b| b.quality_per_token).unwrap_or(0.0),
-            benchmarks.last().map(|b| b.tasks_per_dollar).unwrap_or(0.0));
+        println!(
+            "  ⇒ {}/{} ok, ${:.4}, q/tok {:.4}, tasks/$ {:.2}\n",
+            successful,
+            tasks.len(),
+            total_cost,
+            benchmarks
+                .last()
+                .map(|b| b.quality_per_token)
+                .unwrap_or(0.0),
+            benchmarks.last().map(|b| b.tasks_per_dollar).unwrap_or(0.0)
+        );
     }
 
-    BenchmarkComparison { policies: benchmarks }
+    BenchmarkComparison {
+        policies: benchmarks,
+    }
 }
 
 /// Quality-scoring shim. Uses the BenchmarkTask's expected_min_chars/max_chars

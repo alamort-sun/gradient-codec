@@ -1,9 +1,6 @@
 pub mod live;
 
-use crate::adapter::{CompletionRequest, ProviderId, TokenUsage};
-use crate::budget::BudgetState;
-use crate::critique::FailureHistory;
-use crate::routing::{RoutingPolicy, RoutingDecision};
+use crate::adapter::{ProviderId, TokenUsage};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -21,6 +18,7 @@ pub struct BenchmarkTask {
 
 /// Results for one policy on one task
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(not(test), allow(dead_code))] // TaskResult only instantiated inside #[cfg(test)]
 pub struct TaskResult {
     pub task_id: String,
     pub policy_name: String,
@@ -49,11 +47,15 @@ pub struct PolicyBenchmark {
 }
 
 impl PolicyBenchmark {
+    #[cfg_attr(not(test), allow(dead_code))] // from_results called only from tests
     pub fn from_results(policy_name: &str, results: &[TaskResult]) -> Self {
         let total_tasks = results.len();
         let successful_tasks = results.iter().filter(|r| r.success).count();
         let total_cost: f64 = results.iter().map(|r| r.cost_usd).sum();
-        let total_tokens: u32 = results.iter().map(|r| r.usage.input_tokens + r.usage.output_tokens).sum();
+        let total_tokens: u32 = results
+            .iter()
+            .map(|r| r.usage.input_tokens + r.usage.output_tokens)
+            .sum();
         let avg_quality: f64 = if results.is_empty() {
             0.0
         } else {
@@ -78,8 +80,16 @@ impl PolicyBenchmark {
             total_tokens,
             avg_quality_score: avg_quality,
             avg_latency_ms: avg_latency,
-            quality_per_token: if avg_tokens > 0.0 { avg_quality / avg_tokens } else { 0.0 },
-            tasks_per_dollar: if total_cost > 0.0 { successful_tasks as f64 / total_cost } else { 0.0 },
+            quality_per_token: if avg_tokens > 0.0 {
+                avg_quality / avg_tokens
+            } else {
+                0.0
+            },
+            tasks_per_dollar: if total_cost > 0.0 {
+                successful_tasks as f64 / total_cost
+            } else {
+                0.0
+            },
         }
     }
 }
@@ -100,7 +110,11 @@ impl BenchmarkComparison {
         ));
         s.push_str(&format!(
             "{}-+-{}-+-{}-+-{}-+-{}\n",
-            "-".repeat(20), "-".repeat(14), "-".repeat(8), "-".repeat(12), "-".repeat(10)
+            "-".repeat(20),
+            "-".repeat(14),
+            "-".repeat(8),
+            "-".repeat(12),
+            "-".repeat(10)
         ));
 
         for p in &self.policies {
@@ -121,7 +135,7 @@ impl BenchmarkComparison {
 /// Load a benchmark task suite from a JSON file
 pub fn load_task_suite(path: &Path) -> Result<Vec<BenchmarkTask>, std::io::Error> {
     let content = std::fs::read_to_string(path)?;
-    serde_json::from_str(&content).map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
+    serde_json::from_str(&content).map_err(std::io::Error::other)
 }
 
 /// Simple quality scoring: check if output is within expected length range
@@ -226,7 +240,10 @@ mod tests {
                 task_id: "t1".into(),
                 policy_name: "cheapest-first".into(),
                 provider: ProviderId("ollama/local".into()),
-                usage: TokenUsage { input_tokens: 50, output_tokens: 100 },
+                usage: TokenUsage {
+                    input_tokens: 50,
+                    output_tokens: 100,
+                },
                 cost_usd: 0.0,
                 latency_ms: 2000,
                 quality_score: 0.7,
@@ -236,7 +253,10 @@ mod tests {
                 task_id: "t2".into(),
                 policy_name: "cheapest-first".into(),
                 provider: ProviderId("ollama/local".into()),
-                usage: TokenUsage { input_tokens: 80, output_tokens: 150 },
+                usage: TokenUsage {
+                    input_tokens: 80,
+                    output_tokens: 150,
+                },
                 cost_usd: 0.0,
                 latency_ms: 1800,
                 quality_score: 0.8,
