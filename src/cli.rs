@@ -28,7 +28,7 @@ use crate::trace::Trace;
     about = "Budget-aware multi-model orchestration runtime",
     version = "0.1.0",
     long_about = "Routes LLM requests among providers with budget ceilings, \
-                  reproducible traces, and cross-model failure critique."
+                  in-memory traces, and cross-model failure critique."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -54,13 +54,6 @@ pub enum Commands {
         /// Force a specific provider (overrides routing policy)
         #[arg(long)]
         provider: Option<String>,
-    },
-
-    /// Replay a previous trace and compare results
-    Replay {
-        /// Path to the trace JSON file
-        #[arg(long)]
-        trace: PathBuf,
     },
 
     /// Benchmark multiple routing policies against a task suite
@@ -286,66 +279,9 @@ pub async fn run_command(
         }
     }
 
-    let trace_dir = std::env::var("GC_TRACE_DIR").unwrap_or_else(|_| "./traces".into());
-    let trace_path = trace.write_to_file(std::path::Path::new(&trace_dir))?;
-    eprintln!("Trace written to: {}", trace_path.display());
-
-    Ok(())
-}
-
-pub async fn replay_command(trace_path: PathBuf) -> Result<(), Box<dyn std::error::Error>> {
-    let original = crate::trace::load_trace(&trace_path)?;
-
-    println!("Loaded trace: {}", original.trace_id);
-    println!(
-        "Original routing: {} → {}",
-        original.routing.rationale, original.routing.provider
-    );
-    println!(
-        "Original cost: ${:.6}",
-        original
-            .result
-            .as_ref()
-            .map(|r| r.actual_cost_usd)
-            .unwrap_or(0.0)
-    );
-
-    // 720° closed loop: reconstruct a trace of the SAME input + diff it against the
-    // original. Exercises ReplayResult/compare/summary + mark_as_replay — the
-    // routing engine re-running on a changed bucket is the next milestone.
-    let replay_request = crate::adapter::CompletionRequest {
-        prompt: original.request.prompt.clone().unwrap_or_default(),
-        max_tokens: original.request.max_tokens,
-        temperature: original.request.temperature,
-        system: None,
-        tools: None,
-        task_type: original.request.task_type.clone(),
-    };
-    let mut replayed = crate::trace::Trace::new(&replay_request, original.routing.clone());
-    replayed.mark_as_replay(
-        original.trace_id.clone(),
-        "reproduction via CLI replay (same input, re-routed)".into(),
-        original.routing.provider != replayed.routing.provider,
-    )?;
-
-    let result = crate::trace::ReplayResult::compare(original, replayed.clone());
-    println!(
-        "Original trace: {} (input cost ${:.6})",
-        result.original.trace_id,
-        result
-            .original
-            .result
-            .as_ref()
-            .map(|r| r.actual_cost_usd)
-            .unwrap_or(0.0)
-    );
-    println!("{}", result.summary());
-
-    let trace_dir = std::env::var("GC_TRACE_DIR").unwrap_or_else(|_| "./traces".into());
-    let replayed_path = result
-        .replayed
-        .write_to_file(std::path::Path::new(&trace_dir))?;
-    eprintln!("Replay trace written to: {}", replayed_path.display());
+    // Durable Trace write/replay removed (Susano B2). Ephemeral `trace` stays
+    // in-memory only; content-addressed ClosureReceipt/ActDigest is A2, not invented here.
+    let _ = trace;
 
     Ok(())
 }

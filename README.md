@@ -33,7 +33,7 @@ Teams running multi-model workflows in production face four problems no current 
 
 - **Routes tasks among LLM providers** according to quality, latency, token cost, privacy constraints, and failure history
 - **Enforces budget ceilings** with predictive cost estimation before dispatch, not after
-- **Emits reproducible traces**: every routing decision, model call, token count, and response is logged in a structured format that can be deterministically replayed
+- **Keeps in-memory traces**: every routing decision, model call, token count, and response is recorded ephemerally for the request (no durable `trace_id` / filesystem replay — see Trace note below)
 - **Routes failures with cross-model critique**: when a model fails, the failure is classified (timeout, content policy, rate limit, quality degradation, malformed output) and the retry is routed to the model best suited to recover from that failure class
 - **Benchmarks routing policies**: quality-per-token and successful-task-per-dollar metrics that let you compare policies on value, not just price
 
@@ -105,9 +105,6 @@ gradient-codec run --prompt "Summarize this article" --budget 0.05
 # Run with a specific routing policy
 gradient-codec run --prompt "Write a haiku" --policy cheapest-first --budget 0.02
 
-# Replay a previous trace
-gradient-codec replay --trace ./traces/2026-09-13T19:30:00Z.json
-
 # Benchmark two routing policies against a task suite
 gradient-codec benchmark --policies cheapest-first,quality-first --tasks ./benchmark-suite/
 ```
@@ -157,7 +154,7 @@ budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 - [x] Routing policy interface (provider-agnostic)
 - [x] Token/cost ledger with budget ceilings
 - [x] Predictive cost estimation before dispatch
-- [x] JSON trace output + deterministic replay
+- [x] In-memory Trace (no durable joinable identity; write/replay deleted — Susano B2)
 - [x] One benchmark suite (quality-per-token, successful-task-per-dollar)
 - [x] CLI + minimal HTTP API layer
 - [x] Adapters: OpenAI, Anthropic, Ollama (local), one OpenAI-compatible custom
@@ -169,6 +166,13 @@ budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 - **v0.3**: Policy DSL, web dashboard, distributed tracing export (OpenTelemetry)
 - **v0.4**: Automated policy tuning from benchmark results, A/B policy comparison
 - **v0.5**: Privacy-constrained routing (on-prem models, data residency rules)
+
+
+## Trace durability (Susano B2)
+
+Durable joinable Trace identity (`trace_id`, `original_trace_id` / `ReplayMetadata`) and the filesystem write/replay path (`Trace::write_to_file`, `load_trace`, CLI `replay`) are **deleted**. `JoinClass` / `join_across_leases` remain as belt + bleed tests in `src/boundary.rs`, not as mortar for those APIs.
+
+Content-addressed replacement: Saraswati A2 `ClosureReceipt` + `ActDigest`. Those types are **not** in this crate yet — do not invent stand-ins on the router plane.
 
 ## Authority Boundary
 

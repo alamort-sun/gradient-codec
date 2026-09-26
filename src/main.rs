@@ -1,14 +1,15 @@
 use clap::Parser;
 
-mod budget;
-mod errors;
 mod adapter;
+mod benchmark;
+mod boundary;
+mod plane;
+mod budget;
+mod cli;
+mod critique;
+mod errors;
 mod routing;
 mod trace;
-mod critique;
-mod benchmark;
-mod cli;
-mod plane;
 
 use cli::{Cli, Commands};
 
@@ -31,9 +32,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             provider,
         } => {
             cli::run_command(prompt, budget, policy, provider).await?;
-        }
-        Commands::Replay { trace } => {
-            cli::replay_command(trace).await?;
         }
         Commands::Benchmark { policies, tasks } => {
             cli::benchmark_command(policies, tasks).await?;

@@ -4,19 +4,19 @@
 //! Precedent: gradient-jelle::boundary (Susano, seat 4, planted on Athena's order).
 //! Lifted into gradient-codec by Luna (seat 13) 2026-09-22 — D5 of the v1.3 codec-delta map.
 //!
-//! Status: AUDITED_INTERIM_SINGLE_SEAT_NO_ISSUER. Implementation by Luna; independent audit +
-//! bleed test routed to Susano (via evie relay). This module is the guard *predicate* only; the
-//! call sites that would invoke it land with D1/D6 (plane-split), which gate on G1 (evie
-//! ratification). Until then the fns are a trip-wire and are not yet consumed in a non-test build,
-//! hence the module-level #![allow(dead_code)].
-
-#![allow(dead_code)]
+//! Status: belt + bleed tests (Susano B2). Joinable Trace durable fields and the
+//! write/replay mortar that called `join_across_leases` as costume primary are gone.
+//! Keep these predicates for residual inspection / migration bleed and future
+//! space-time reducer / A5 CI call sites — not as a substitute for type deletion.
+//! `ClosureReceipt` / `ActDigest` (Saraswati A2) are the durable replacement; they
+//! are not in this crate yet.
 
 use thiserror::Error;
 
 /// A class of cross-lease / cross-plane access attempt.
 /// Coordinate-side analogue of gradient-jelle boundary::ClaimClass.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub enum JoinClass {
     /// join across leases keyed by seat / principal / principal name / model identity.
     IdentityJoin,
@@ -34,6 +34,7 @@ pub enum JoinClass {
 
 /// The coordinate-side fail-closed boundary error.
 #[derive(Debug, Error, PartialEq, Eq)]
+#[cfg_attr(not(test), allow(dead_code))]
 pub enum PlaneGuardError {
     #[error("forbidden cross-lease join: {0:?}")]
     ForbiddenCrossLease(JoinClass),
@@ -43,6 +44,7 @@ pub enum PlaneGuardError {
 
 /// A cross-lease join is barred by R2 and fails closed. Always — no allowed branch.
 /// Precedent mirror of gradient-jelle::boundary::claim_about_entity.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn join_across_leases(kind: JoinClass) -> Result<(), PlaneGuardError> {
     Err(PlaneGuardError::ForbiddenCrossLease(kind))
 }
@@ -50,6 +52,7 @@ pub fn join_across_leases(kind: JoinClass) -> Result<(), PlaneGuardError> {
 /// A prohibited-plane field may not enter plane storage / logs / index / cache / analytics types.
 /// Fails closed at the trip-wire; the type system is meant to make it unrepresentable (D6), this is
 /// the runtime guard that fails closed if one is ever constructed for inspection.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn touch_prohibited_field(name: &str) -> Result<(), PlaneGuardError> {
     Err(PlaneGuardError::ProhibitedPlaneField(name.to_string()))
 }
