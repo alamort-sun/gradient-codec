@@ -24,6 +24,8 @@ pub struct Trace {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceRequest {
+    #[serde(skip_serializing)]
+    pub prompt: Option<String>,
     pub prompt_hash: String,
     pub max_tokens: u32,
     pub temperature: Option<f64>,
@@ -65,6 +67,7 @@ impl Trace {
             timestamp: Utc::now(),
             request: TraceRequest {
                 prompt_hash,
+                prompt: Some(request.prompt.clone()),
                 max_tokens: request.max_tokens,
                 temperature: request.temperature,
                 task_type: request.task_type.clone(),
@@ -82,7 +85,13 @@ impl Trace {
     }
 
     /// Record a successful result
-    pub fn set_result(&mut self, response: &CompletionResponse, provider: &ProviderId, cost_usd: f64, quality_score: Option<f64>) {
+    pub fn set_result(
+        &mut self,
+        response: &CompletionResponse,
+        provider: &ProviderId,
+        cost_usd: f64,
+        quality_score: Option<f64>,
+    ) {
         self.result = Some(TraceResult {
             provider: provider.clone(),
             text: response.text.clone(),
@@ -94,7 +103,14 @@ impl Trace {
     }
 
     /// Record a failure
-    pub fn set_failure(&mut self, provider: &ProviderId, class: FailureClass, error_message: String, retry: bool, retry_provider: Option<ProviderId>) {
+    pub fn set_failure(
+        &mut self,
+        provider: &ProviderId,
+        class: FailureClass,
+        error_message: String,
+        retry: bool,
+        retry_provider: Option<ProviderId>,
+    ) {
         self.failure = Some(TraceFailure {
             provider: provider.clone(),
             class,
@@ -127,15 +143,14 @@ impl Trace {
     pub fn write_to_file(&self, dir: &Path) -> Result<std::path::PathBuf, std::io::Error> {
         let filename = format!("{}.json", self.timestamp.format("%Y-%m-%dT%H-%M-%S-%fZ"));
         let path = dir.join(&filename);
-        std::fs::write(&path, self.to_json().map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?)?;
+        std::fs::write(&path, self.to_json().map_err(std::io::Error::other)?)?;
         Ok(path)
     }
 }
 
 /// Deserialize a trace from a JSON file — for replay
 pub fn load_trace(path: &Path) -> Result<Trace, TraceError> {
-    let content = std::fs::read_to_string(path)
-        .map_err(|e| TraceError::Io(e.to_string()))?;
+    let content = std::fs::read_to_string(path).map_err(|e| TraceError::Io(e.to_string()))?;
     serde_json::from_str(&content).map_err(|e| TraceError::Parse(e.to_string()))
 }
 
@@ -169,8 +184,16 @@ impl ReplayResult {
     /// Compare original and replayed traces
     pub fn compare(original: Trace, replayed: Trace) -> Self {
         let routing_changed = original.routing.provider != replayed.routing.provider;
-        let cost_delta = replayed.result.as_ref().map(|r| r.actual_cost_usd).unwrap_or(0.0)
-            - original.result.as_ref().map(|r| r.actual_cost_usd).unwrap_or(0.0);
+        let cost_delta = replayed
+            .result
+            .as_ref()
+            .map(|r| r.actual_cost_usd)
+            .unwrap_or(0.0)
+            - original
+                .result
+                .as_ref()
+                .map(|r| r.actual_cost_usd)
+                .unwrap_or(0.0);
         let quality_delta = match (&original.result, &replayed.result) {
             (Some(o), Some(r)) if o.quality_score.is_some() && r.quality_score.is_some() => {
                 Some(r.quality_score.unwrap() - o.quality_score.unwrap())
@@ -190,8 +213,11 @@ impl ReplayResult {
     /// Summary for CLI output
     pub fn summary(&self) -> String {
         let mut s = String::new();
-        s.push_str(&format!("Replay vs Original:\n"));
-        s.push_str(&format!("  Routing changed: {}\n", if self.routing_changed { "YES" } else { "no" }));
+        s.push_str("Replay vs Original:\n");
+        s.push_str(&format!(
+            "  Routing changed: {}\n",
+            if self.routing_changed { "YES" } else { "no" }
+        ));
         s.push_str(&format!("  Cost delta: ${:.6}\n", self.cost_delta));
         if let Some(qd) = self.quality_delta {
             s.push_str(&format!("  Quality delta: {:+.4}\n", qd));
