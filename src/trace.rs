@@ -1,10 +1,9 @@
 //! Ephemeral orchestration trace (in-memory only).
 //!
-//! Durable joinable identity (`trace_id` / `original_trace_id`) and the
-//! write/replay path (`write_to_file`, `load_trace`, CLI `replay`) were
-//! removed (Susano B2 / dry-audit v1.3). Content-addressed replacement is
-//! Saraswati A2: `ClosureReceipt` + `ActDigest` — those types are not in
-//! this crate yet; do not invent stand-ins here.
+//! Durable joinable identity (`trace_id` / `original_trace_id` / `prompt_hash`)
+//! and the write/replay path (`write_to_file`, `load_trace`, CLI `replay`) were
+//! removed (Susano B2 / dry-audit v1.3 + A2 residual cut). Content-addressed
+//! replacement: Saraswati A2 `ClosureReceipt` + `ActDigest` in `gradient-plane`.
 
 use crate::adapter::{CompletionRequest, CompletionResponse, ProviderId, TokenUsage};
 use crate::budget::BudgetSnapshot;
@@ -12,7 +11,6 @@ use crate::critique::FailureClass;
 use crate::routing::RoutingDecision;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 /// A complete in-memory trace of a single orchestration step.
 /// Not durable: no joinable identity fields, no filesystem write/replay.
@@ -26,9 +24,9 @@ pub struct Trace {
     pub budget_after: BudgetSnapshot,
 }
 
+/// Ephemeral request slice. No content hash — hashes are join keys (R2 / A5).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraceRequest {
-    pub prompt_hash: String,
     pub max_tokens: u32,
     pub temperature: Option<f64>,
     pub task_type: Option<String>,
@@ -56,11 +54,9 @@ pub struct TraceFailure {
 impl Trace {
     /// Create a new in-memory trace from a request and routing decision.
     pub fn new(request: &CompletionRequest, routing: RoutingDecision) -> Self {
-        let prompt_hash = hash_prompt(&request.prompt);
         Self {
             timestamp: Utc::now(),
             request: TraceRequest {
-                prompt_hash,
                 max_tokens: request.max_tokens,
                 temperature: request.temperature,
                 task_type: request.task_type.clone(),
@@ -123,14 +119,6 @@ impl Trace {
     }
 }
 
-/// Hash a prompt for in-memory dedup matching (not a durable correlation key API).
-fn hash_prompt(prompt: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(prompt.as_bytes());
-    let result = hasher.finalize();
-    format!("sha256:{}", hex::encode(result))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -167,19 +155,29 @@ mod tests {
 
         assert_eq!(parsed.request.max_tokens, 100);
         assert_eq!(parsed.routing.provider.0, "openai/gpt-4o-mini");
-        assert_eq!(parsed.request.prompt_hash, trace.request.prompt_hash);
+        assert_eq!(parsed.request.task_type.as_deref(), Some("chat"));
         // Joinable durable identity must stay inexpressible on Trace.
         let v: serde_json::Value = serde_json::from_str(&json).unwrap();
         assert!(v.get("trace_id").is_none());
         assert!(v.get("replay_metadata").is_none());
         assert!(v.get("original_trace_id").is_none());
+        assert!(v.get("prompt_hash").is_none());
+        assert!(v["request"].get("prompt_hash").is_none());
     }
 
     #[test]
-    fn test_prompt_hash_deterministic() {
-        let h1 = hash_prompt("Hello");
-        let h2 = hash_prompt("Hello");
-        assert_eq!(h1, h2);
-        assert!(h1.starts_with("sha256:"));
+    fn trace_request_has_no_joinable_hash_field() {
+        // Parse only the TraceRequest struct body (avoid matching this test's own text).
+        let src = include_str!("trace.rs");
+        let start = src
+            .find("pub struct TraceRequest {")
+            .expect("TraceRequest struct");
+        let rest = &src[start..];
+        let end = rest.find('}').expect("TraceRequest closing brace");
+        let body = &rest[..end];
+        assert!(
+            !body.contains("prompt_hash"),
+            "TraceRequest must not declare prompt_hash (A5 / R2): {body}"
+        );
     }
 }

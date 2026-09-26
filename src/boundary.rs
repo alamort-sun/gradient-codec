@@ -8,8 +8,8 @@
 //! write/replay mortar that called `join_across_leases` as costume primary are gone.
 //! Keep these predicates for residual inspection / migration bleed and future
 //! space-time reducer / A5 CI call sites — not as a substitute for type deletion.
-//! `ClosureReceipt` / `ActDigest` (Saraswati A2) are the durable replacement; they
-//! are not in this crate yet.
+//! `ActDigest` / `LeaseId` / siblings live in workspace member `gradient-plane`.
+//! Keep this belt for bleed tests + reducer/A5 call sites — not as Trace mortar.
 
 use thiserror::Error;
 

@@ -39,6 +39,8 @@ jobs:
           roots=()
           [[ -f src/plane.rs ]] && roots+=(src/plane.rs)
           [[ -d src/plane ]] && roots+=(src/plane)
+          [[ -d plane ]] && roots+=(plane)
+          [[ -f src/trace.rs ]] && roots+=(src/trace.rs)
           [[ -d vecGradient ]] && roots+=(vecGradient)
           if [[ -d ../gradient-space-time/crates ]]; then
             roots+=(../gradient-space-time/crates)

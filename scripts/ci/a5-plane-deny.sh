@@ -24,15 +24,19 @@ if [[ $# -gt 0 ]]; then
     roots+=("${r}")
   done
 else
-  # Plane prelude surface (not the whole router bin): plane seal + geometry
-  # crate + sibling space-time tables when present in monorepo layout.
-  # Ephemeral router modules (trace/routing/adapter) are out of scope — prompt_hash
-  # there is still wrong long-term, but A5 gates the plane, not the orchestration bin.
+  # Plane prelude + A2 newtypes + ephemeral TraceRequest surface (prompt_hash
+  # deleted; keep scanning so it cannot return) + geometry + sibling space-time.
   if [[ -f "${CODEC_ROOT}/src/plane.rs" ]]; then
     roots+=("${CODEC_ROOT}/src/plane.rs")
   fi
   if [[ -d "${CODEC_ROOT}/src/plane" ]]; then
     roots+=("${CODEC_ROOT}/src/plane")
+  fi
+  if [[ -d "${CODEC_ROOT}/plane" ]]; then
+    roots+=("${CODEC_ROOT}/plane")
+  fi
+  if [[ -f "${CODEC_ROOT}/src/trace.rs" ]]; then
+    roots+=("${CODEC_ROOT}/src/trace.rs")
   fi
   if [[ -d "${CODEC_ROOT}/vecGradient" ]]; then
     roots+=("${CODEC_ROOT}/vecGradient")

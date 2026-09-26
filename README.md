@@ -172,7 +172,7 @@ budget.reconcile(0.05, 0.03)?; // adjust to actual cost
 
 Durable joinable Trace identity (`trace_id`, `original_trace_id` / `ReplayMetadata`) and the filesystem write/replay path (`Trace::write_to_file`, `load_trace`, CLI `replay`) are **deleted**. `JoinClass` / `join_across_leases` remain as belt + bleed tests in `src/boundary.rs`, not as mortar for those APIs.
 
-Content-addressed replacement: Saraswati A2 `ClosureReceipt` + `ActDigest`. Those types are **not** in this crate yet — do not invent stand-ins on the router plane.
+Content-addressed replacement: Saraswati A2 `ClosureReceipt` + `ActDigest` (and siblings) in workspace member `gradient-plane`. Do not invent stand-ins on the router plane; do not reintroduce durable Trace identity.
 
 ## Authority Boundary
 
