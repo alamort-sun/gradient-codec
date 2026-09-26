@@ -1,4 +1,5 @@
 use crate::adapter::{CompletionRequest, CompletionResponse, ProviderId, TokenUsage};
+use crate::boundary::{join_across_leases, JoinClass};
 use crate::budget::BudgetSnapshot;
 use crate::critique::FailureClass;
 use crate::routing::RoutingDecision;
@@ -126,12 +127,16 @@ impl Trace {
     }
 
     /// Mark this trace as a replay of another
-    pub fn mark_as_replay(&mut self, original_id: String, reason: String, changed: bool) {
+    pub fn mark_as_replay(&mut self, original_id: String, reason: String, changed: bool) -> Result<(), TraceError> {
+        // Boundary law: original_trace_id is a global correlation key
+        join_across_leases(JoinClass::GlobalTraceCorrelation)
+            .map_err(|e| TraceError::Boundary(format!("original_trace_id in replay: {}", e)))?;
         self.replay_metadata = Some(ReplayMetadata {
             original_trace_id: original_id,
             replay_reason: reason,
             routing_decision_changed: changed,
         });
+        Ok(())
     }
 
     /// Serialize to JSON string
@@ -140,10 +145,15 @@ impl Trace {
     }
 
     /// Write trace to a file
-    pub fn write_to_file(&self, dir: &Path) -> Result<std::path::PathBuf, std::io::Error> {
+    pub fn write_to_file(&self, dir: &Path) -> Result<std::path::PathBuf, TraceError> {
+        // Boundary law: refuse prohibited cross-lease correlation keys in durable writes
+        join_across_leases(JoinClass::GlobalTraceCorrelation)
+            .map_err(|e| TraceError::Boundary(format!("trace_id in write: {}", e)))?;
+
         let filename = format!("{}.json", self.timestamp.format("%Y-%m-%dT%H-%M-%S-%fZ"));
         let path = dir.join(&filename);
-        std::fs::write(&path, self.to_json().map_err(std::io::Error::other)?)?;
+        let json = self.to_json().map_err(|e| TraceError::Parse(e.to_string()))?;
+        std::fs::write(&path, json).map_err(|e| TraceError::Io(e.to_string()))?;
         Ok(path)
     }
 }
@@ -160,6 +170,8 @@ pub enum TraceError {
     Io(String),
     #[error("trace parse error: {0}")]
     Parse(String),
+    #[error("boundary violation: {0}")]
+    Boundary(String),
 }
 
 /// Hash a prompt for trace deduplication and replay matching
@@ -271,5 +283,82 @@ mod tests {
         let h2 = hash_prompt("Hello");
         assert_eq!(h1, h2);
         assert!(h1.starts_with("sha256:"));
+    }
+
+    /// Negative test: mark_as_replay is barred because original_trace_id is a
+    /// global correlation key across leases.
+    #[test]
+    fn test_mark_as_replay_blocked_by_boundary_law() {
+        let request = CompletionRequest {
+            prompt: "Hello".into(),
+            max_tokens: 100,
+            temperature: Some(0.7),
+            system: None,
+            tools: None,
+            task_type: Some("chat".into()),
+        };
+
+        let routing = RoutingDecision {
+            provider: ProviderId("openai/gpt-4o-mini".into()),
+            estimated_cost: 0.001,
+            rationale: "cheapest".into(),
+            fallback_chain: vec![],
+        };
+
+        let mut trace = Trace::new(&request, routing);
+        let result = trace.mark_as_replay(
+            "original-123".into(),
+            "replay test".into(),
+            false,
+        );
+
+        assert!(result.is_err(), "mark_as_replay should fail with boundary error");
+        match result {
+            Err(TraceError::Boundary(msg)) => {
+                assert!(
+                    msg.contains("original_trace_id"),
+                    "boundary error should mention original_trace_id: {}",
+                    msg
+                );
+            }
+            Err(e) => panic!("expected Boundary error, got {:?}", e),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
+    }
+
+    /// Negative test: trace writes with a global correlation key (trace_id) are
+    /// barred by the boundary law. This is expected to fail until the v1.3 migration
+    /// removes trace_id from durable writes.
+    #[test]
+    fn test_write_blocked_by_boundary_law() {
+        let request = CompletionRequest {
+            prompt: "Hello world".into(),
+            max_tokens: 100,
+            temperature: Some(0.7),
+            system: None,
+            tools: None,
+            task_type: Some("chat".into()),
+        };
+
+        let routing = RoutingDecision {
+            provider: ProviderId("openai/gpt-4o-mini".into()),
+            estimated_cost: 0.001,
+            rationale: "cheapest".into(),
+            fallback_chain: vec![],
+        };
+
+        let trace = Trace::new(&request, routing);
+        let result = trace.write_to_file(std::path::Path::new("."));
+
+        // write_to_file() now always fails with a boundary error because trace_id
+        // is a global correlation key. This is the "BAR not WARN" enforcement.
+        assert!(result.is_err(), "write_to_file should fail with boundary error");
+        match result {
+            Err(TraceError::Boundary(msg)) => {
+                assert!(msg.contains("trace_id"), "boundary error should mention trace_id");
+            }
+            Err(e) => panic!("expected Boundary error, got {:?}", e),
+            Ok(_) => panic!("expected error, got Ok"),
+        }
     }
 }

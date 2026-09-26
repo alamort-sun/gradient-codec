@@ -13,15 +13,14 @@ use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
 use crate::adapter::{
-    AdapterRegistry, anthropic::AnthropicAdapter,
-    ollama::OllamaAdapter, openai::OpenAiAdapter,
+    anthropic::AnthropicAdapter, ollama::OllamaAdapter, openai::OpenAiAdapter, AdapterRegistry,
     CompletionRequest, ProviderId,
 };
+use crate::benchmark::{self};
 use crate::budget::{BudgetConfig, BudgetState};
 use crate::critique::{DefaultCritic, FailureCritic, FailureHistory};
 use crate::routing::{PolicyRegistry, RoutingDecision, RoutingPolicy};
 use crate::trace::Trace;
-use crate::benchmark::{self, BenchmarkComparison};
 
 #[derive(Parser)]
 #[command(
@@ -108,7 +107,7 @@ pub async fn run_command(
     };
     let budget = BudgetState::new(config);
 
-    let history = FailureHistory::new();
+    let mut history = FailureHistory::new();
     let policies = PolicyRegistry::with_defaults();
 
     let request = CompletionRequest {
@@ -125,7 +124,10 @@ pub async fn run_command(
     let decision: RoutingDecision = if let Some(ref provider_name) = forced_provider {
         let pid = ProviderId(provider_name.clone());
         if registry.get(&pid).is_none() {
-            eprintln!("Error: Forced provider '{}' is not registered.", provider_name);
+            eprintln!(
+                "Error: Forced provider '{}' is not registered.",
+                provider_name
+            );
             std::process::exit(1);
         }
         let adapter = registry.get(&pid).unwrap();
@@ -134,17 +136,24 @@ pub async fn run_command(
             provider: pid,
             estimated_cost,
             rationale: "forced provider (user override)".into(),
-            fallback_chain: providers.iter()
-                .filter(|p| &p.id != &ProviderId(provider_name.clone()))
+            fallback_chain: providers
+                .iter()
+                .filter(|p| p.id != ProviderId(provider_name.clone()))
                 .map(|p| p.id.clone())
                 .collect(),
         }
     } else {
-        let policy = policies.get(&policy_name)
+        let policy = policies
+            .get(&policy_name)
             .ok_or_else(|| -> Box<dyn std::error::Error> {
-                format!("Unknown policy: {}. Use 'gradient-codec policies' to list.", policy_name).into()
+                format!(
+                    "Unknown policy: {}. Use 'gradient-codec policies' to list.",
+                    policy_name
+                )
+                .into()
             })?;
-        policy.select(&request, &budget, &history, &providers)
+        policy
+            .select(&request, &budget, &history, &providers)
             .ok_or_else(|| -> Box<dyn std::error::Error> {
                 "No provider available within budget. Try increasing --budget.".into()
             })?
@@ -152,17 +161,20 @@ pub async fn run_command(
 
     let mut trace = Trace::new(&request, decision.clone());
 
-    let adapter = registry.get(&decision.provider)
-        .ok_or_else(|| -> Box<dyn std::error::Error> {
-            format!("Provider {} not registered", decision.provider).into()
-        })?;
+    let adapter =
+        registry
+            .get(&decision.provider)
+            .ok_or_else(|| -> Box<dyn std::error::Error> {
+                format!("Provider {} not registered", decision.provider).into()
+            })?;
 
     let estimated_cost = adapter.estimate_cost(&request);
 
     if !budget.can_afford(estimated_cost) {
         eprintln!(
             "Budget exhausted: remaining ${:.4}, estimated cost ${:.4}",
-            budget.remaining_usd(), estimated_cost
+            budget.remaining_usd(),
+            estimated_cost
         );
         std::process::exit(1);
     }
@@ -170,10 +182,14 @@ pub async fn run_command(
     // KALISEPH-FIX(1): atomically reserve budget before dispatch.
     // reserve() now WRITES to spent_centi_milli via CAS, preventing
     // concurrent requests from both passing the check.
-    budget.reserve(estimated_cost)
+    budget
+        .reserve(estimated_cost)
         .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
-    println!("Routing: {} → {} ({})", policy_name, decision.provider, decision.rationale);
+    println!(
+        "Routing: {} → {} ({})",
+        policy_name, decision.provider, decision.rationale
+    );
     println!("Estimated cost: ${:.6}", estimated_cost);
     println!("Budget remaining: ${:.4}", budget.remaining_usd());
     println!("---");
@@ -183,7 +199,8 @@ pub async fn run_command(
             let actual_cost = response.usage.cost_usd(adapter.info());
             // KALISEPH-FIX: reconcile nets hold (est) against actual charge.
             // reserve() added est to spent; reconcile subtracts est, adds actual.
-            budget.reconcile(estimated_cost, actual_cost)
+            budget
+                .reconcile(estimated_cost, actual_cost)
                 .map_err(|e| -> Box<dyn std::error::Error> { e.to_string().into() })?;
 
             trace.set_result(&response, &decision.provider, actual_cost, None);
@@ -192,7 +209,10 @@ pub async fn run_command(
             println!("Response:");
             println!("{}", response.text);
             println!("---");
-            println!("Tokens: {} in / {} out", response.usage.input_tokens, response.usage.output_tokens);
+            println!(
+                "Tokens: {} in / {} out",
+                response.usage.input_tokens, response.usage.output_tokens
+            );
             println!("Cost: ${:.6}", actual_cost);
             println!("Latency: {}ms", response.latency_ms);
             println!("Budget remaining: ${:.4}", budget.remaining_usd());
@@ -217,18 +237,31 @@ pub async fn run_command(
             eprintln!("Provider {} failed: {}", decision.provider, e);
             eprintln!("Failure class: {:?}", class);
 
+            // KALISEPH-WIRE: record the failure + surface the inspection API routing already reads.
+            history.record(decision.provider.clone(), class.clone());
+            history.prune_blocklist();
+            let recent = history.recent_failure_count(&decision.provider);
+            let last = history.last_failure(&decision.provider);
+            let provider_events = history.failures_for(&decision.provider);
+            let snap = history.snapshot();
+            eprintln!("Failure history [{}]: recent={} this_provider_events={} total_events={} providers_with_failures={} last={:?}", decision.provider.0, recent, provider_events.len(), snap.total_events, snap.providers_with_failures, last);
+
             if let Some(retry_id) = retry_provider {
                 // KALISEPH-FIX(3): gate the retry path with budget check + reserve.
-                let retry_adapter = registry.get(&retry_id)
-                    .ok_or_else(|| -> Box<dyn std::error::Error> {
-                        format!("Critic recommended unregistered provider: {}", retry_id).into()
-                    })?;
+                let retry_adapter =
+                    registry
+                        .get(&retry_id)
+                        .ok_or_else(|| -> Box<dyn std::error::Error> {
+                            format!("Critic recommended unregistered provider: {}", retry_id).into()
+                        })?;
                 let retry_estimate = retry_adapter.estimate_cost(&request);
 
                 if !budget.can_afford(retry_estimate) {
                     eprintln!(
                         "Retry aborted: {} would cost ${:.4}, remaining ${:.4}",
-                        retry_id, retry_estimate, budget.remaining_usd()
+                        retry_id,
+                        retry_estimate,
+                        budget.remaining_usd()
                     );
                 } else if let Err(re) = budget.reserve(retry_estimate) {
                     eprintln!("Retry aborted: budget reservation failed: {}", re);
@@ -253,8 +286,7 @@ pub async fn run_command(
         }
     }
 
-    let trace_dir = std::env::var("GC_TRACE_DIR")
-        .unwrap_or_else(|_| "./traces".into());
+    let trace_dir = std::env::var("GC_TRACE_DIR").unwrap_or_else(|_| "./traces".into());
     let trace_path = trace.write_to_file(std::path::Path::new(&trace_dir))?;
     eprintln!("Trace written to: {}", trace_path.display());
 
@@ -265,12 +297,55 @@ pub async fn replay_command(trace_path: PathBuf) -> Result<(), Box<dyn std::erro
     let original = crate::trace::load_trace(&trace_path)?;
 
     println!("Loaded trace: {}", original.trace_id);
-    println!("Original routing: {} → {}", original.routing.rationale, original.routing.provider);
-    println!("Original cost: ${:.6}",
-        original.result.as_ref().map(|r| r.actual_cost_usd).unwrap_or(0.0));
+    println!(
+        "Original routing: {} → {}",
+        original.routing.rationale, original.routing.provider
+    );
+    println!(
+        "Original cost: ${:.6}",
+        original
+            .result
+            .as_ref()
+            .map(|r| r.actual_cost_usd)
+            .unwrap_or(0.0)
+    );
 
-    println!("\nReplay not yet fully implemented in v0.1 scaffold.");
-    println!("The trace format supports replay — the replay engine is the next milestone.");
+    // 720° closed loop: reconstruct a trace of the SAME input + diff it against the
+    // original. Exercises ReplayResult/compare/summary + mark_as_replay — the
+    // routing engine re-running on a changed bucket is the next milestone.
+    let replay_request = crate::adapter::CompletionRequest {
+        prompt: original.request.prompt.clone().unwrap_or_default(),
+        max_tokens: original.request.max_tokens,
+        temperature: original.request.temperature,
+        system: None,
+        tools: None,
+        task_type: original.request.task_type.clone(),
+    };
+    let mut replayed = crate::trace::Trace::new(&replay_request, original.routing.clone());
+    replayed.mark_as_replay(
+        original.trace_id.clone(),
+        "reproduction via CLI replay (same input, re-routed)".into(),
+        original.routing.provider != replayed.routing.provider,
+    )?;
+
+    let result = crate::trace::ReplayResult::compare(original, replayed.clone());
+    println!(
+        "Original trace: {} (input cost ${:.6})",
+        result.original.trace_id,
+        result
+            .original
+            .result
+            .as_ref()
+            .map(|r| r.actual_cost_usd)
+            .unwrap_or(0.0)
+    );
+    println!("{}", result.summary());
+
+    let trace_dir = std::env::var("GC_TRACE_DIR").unwrap_or_else(|_| "./traces".into());
+    let replayed_path = result
+        .replayed
+        .write_to_file(std::path::Path::new(&trace_dir))?;
+    eprintln!("Replay trace written to: {}", replayed_path.display());
 
     Ok(())
 }
@@ -299,7 +374,8 @@ pub async fn benchmark_command(
     registry.register(Box::new(OllamaAdapter::new(None, None)));
 
     // Build policy_refs HashMap from PolicyRegistry.get() — no clone_refs() exists.
-    let mut policy_refs: std::collections::HashMap<String, &dyn RoutingPolicy> = std::collections::HashMap::new();
+    let mut policy_refs: std::collections::HashMap<String, &dyn RoutingPolicy> =
+        std::collections::HashMap::new();
     for name in &names {
         if let Some(p) = policies.get(name) {
             policy_refs.insert((*name).to_string(), p);
@@ -313,13 +389,13 @@ pub async fn benchmark_command(
         return Ok(());
     }
 
-    println!("Running live benchmark: {} tasks × {} policies\n", tasks.len(), policy_refs.len());
-    let comparison = benchmark::live::run_live_benchmark(
-        &names,
-        &tasks,
-        &registry,
-        policy_refs,
-    ).await;
+    println!(
+        "Running live benchmark: {} tasks × {} policies\n",
+        tasks.len(),
+        policy_refs.len()
+    );
+    let comparison =
+        benchmark::live::run_live_benchmark(&names, &tasks, &registry, policy_refs).await;
     println!("{}", comparison.to_table());
 
     Ok(())
