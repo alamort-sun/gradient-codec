@@ -86,7 +86,7 @@ fn main() {
                 json!({
                     "ok": true,
                     "codec": "Vector15D",
-                    "state_space": "R^11 × {Linked,Broken,Gradient} × {Static,Spinning,Oscillating} + poles",
+                    "state_space": "R^13 × {Linked,Broken,Gradient} × {Static,Spinning,Oscillating}",
                     "fields": [
                         {"n": 1,  "name": "amplitude",      "kind": "f64"},
                         {"n": 2,  "name": "frequency",      "kind": "f64"},

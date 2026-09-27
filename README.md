@@ -39,7 +39,7 @@ Teams running multi-model workflows in production face four problems no current 
 
 **Geometry (`vecGradient` / `v15d`):**
 
-- **Defines the canonical Vector15D type** — 15 semantic fields (13 continuous core + 2 universal magnetic poles) that preserve weight, temperature, and axis of a signal that plain text strips away
+- **Defines the canonical Vector15D type** — 15 semantic fields: 13 continuous `f64` fields (including the 2 universal magnetic poles) plus 2 categorical fields, preserving weight, temperature, and axis that plain text strips away
 - **Validates and serializes** codec-valid state for non-Rust callers via `v15d`
 
 ## Vector15D — The Canonical Type
@@ -49,7 +49,7 @@ Teams running multi-model workflows in production face four problems no current 
 The state space is **fixed 15D in semantic structure**. Not a dynamic embedding.
 
 ```
-G = R^11 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
+G = R^13 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 ```
 
 ```rust

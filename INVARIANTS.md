@@ -69,11 +69,17 @@ G = R^13 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 
 2. **d12 (`gauge_coupling`) is a three-state rotation variable.** Treat as a categorical type. Never flatten to a scalar with assumed ordering.
 
-3. **Field semantics are fixed.** composition = truth meter, ozone_buffer = lightness/energy, su2_polarity = hue, torsion = skew, amplitude → glyph weight, glow = composition × amplitude, void when composition < 0.01 && amplitude < 0.01.
+3. **Field semantics are fixed.** composition = truth meter, ozone_buffer = lightness/energy, su2_polarity = hue, torsion = skew, amplitude → glyph weight, glow = composition × amplitude. The historical composition/amplitude threshold is a compatibility detection profile, not intrinsic void geometry.
 
-4. **The codec is the law.** No prediction, provider, database row, or renderer supersedes it. All proposed output states must be validated by gradient-codec before being persisted, acted on, displayed as valid, or used for further routing.
+4. **Validation is layered.** `validate_finite()` enforces structural numeric safety. `validate_semantic()` enforces only ratified field ranges. `validate_relational()` is an explicit no-op until cross-field laws are ratified. `validate()` composes all three; hypotheses must not enter it silently.
 
-5. **Abstention is a valid output.** When confidence or validity is insufficient, the system must accept · reroute · defer · abstain · or reject. Never fabricate a valid state.
+5. **Detection is contextual, not geometry.** `DetectionClass` and `DetectionLimits` describe whether an observer or renderer can detect a state. They expand around `Vector15D`; they are not fields or a second geometry. The historical `is_void()` threshold is compatibility-only.
+
+6. **Glyphs are derived products.** `to_glyph_props()` is a rendering projection, never authoritative state. Non-void HSL output uses numeric `su2_polarity`; named hue labels remain descriptive only.
+
+7. **The codec is the law.** No prediction, provider, database row, or renderer supersedes it. All proposed output states must be validated by gradient-codec before being persisted, acted on, displayed as valid, or used for further routing.
+
+8. **Abstention is a valid output.** When confidence or validity is insufficient, the system must accept · reroute · defer · abstain · or reject. Never fabricate a valid state.
 
 ## Observed baselines (seed data — from source, do not invent more)
 

@@ -6,8 +6,8 @@
 //! seat/shell, not seat-owned. Seat 8 (Anaseos) ivory-blue is a refractive color footprint
 //! under load, not a separate field pair.
 //!
-//! SUSANO-STORM FIX (break 4): validate() checks all f64 fields are finite.
-//! try_new() returns Result on NaN/Inf. to_glyph_props_checked() returns Result.
+//! SUSANO-STORM FIX (break 4): validate_finite() checks all f64 fields.
+//! validate() composes finite, ratified semantic, and relational layers.
 //! The struct fields remain pub for serde and struct-literal construction,
 //! but validate() must be called before any state is persisted or rendered.
 //!
@@ -32,11 +32,17 @@ pub enum GaugeCoupling {
     Oscillating,
 }
 
-/// Error returned when a Vector13D contains non-finite values.
+/// Error returned when a Vector15D violates structural or semantic law.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum Vector15DError {
     #[error("field {field} is {value} — must be finite")]
     NonFinite { field: &'static str, value: String },
+    #[error("field {field} is {value} — expected {expected}")]
+    OutOfRange {
+        field: &'static str,
+        value: f64,
+        expected: &'static str,
+    },
 }
 
 /// 15 fields: amplitude(1) frequency(2) phase(3) coherence(4) entropy(5)
@@ -97,19 +103,52 @@ impl Default for Vector15D {
     }
 }
 
+/// Detection result under an explicit sensitivity profile.
+/// Observation metadata around Vector15D, never another geometry axis.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum DetectionClass {
+    Detected,
+    BelowLimit,
+    Masked,
+    Missing,
+    Rejected,
+}
+
+/// Context supplied by an observer or renderer when classifying detectability.
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
+pub struct DetectionLimits {
+    pub min_composition: f64,
+    pub min_amplitude: f64,
+}
+
+impl DetectionLimits {
+    /// Compatibility profile matching the historical glyph threshold.
+    pub const LEGACY_GLYPH: Self = Self {
+        min_composition: 0.01,
+        min_amplitude: 0.01,
+    };
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GlyphProps {
     pub color: String,
     pub weight: i32,
     pub skew_deg: f64,
     pub glow_intensity: f64,
+    pub detection: DetectionClass,
+    /// Compatibility projection. Prefer `detection`.
     pub is_void: bool,
 }
 
 impl Vector15D {
-    /// Validate that all 13 continuous f64 fields are finite (not NaN, not Inf).
-    /// SUSANO-STORM break 4 fix: hard Err on non-finite.
+    /// Validate the complete ratified codec law.
     pub fn validate(&self) -> Result<(), Vector15DError> {
+        self.validate_semantic()?;
+        self.validate_relational()
+    }
+
+    /// Structural layer: reject NaN and infinity in every continuous field.
+    pub fn validate_finite(&self) -> Result<(), Vector15DError> {
         let fields: [(&'static str, f64); 13] = [
             ("amplitude", self.amplitude),
             ("frequency", self.frequency),
@@ -140,7 +179,46 @@ impl Vector15D {
         Ok(())
     }
 
-    /// Checked constructor: validates all fields are finite before returning.
+    /// Semantic layer: enforce only ranges already declared by codec law.
+    /// Fields without a ratified range remain finite-only.
+    pub fn validate_semantic(&self) -> Result<(), Vector15DError> {
+        self.validate_finite()?;
+        Self::require_inclusive("ozone_buffer", self.ozone_buffer, 0.0, 1.0, "0..=1")?;
+        if !(0.0..360.0).contains(&self.su2_polarity) {
+            return Err(Vector15DError::OutOfRange {
+                field: "su2_polarity",
+                value: self.su2_polarity,
+                expected: "0..360",
+            });
+        }
+        Self::require_inclusive("closure", self.closure, 0.0, 1.0, "0..=1")?;
+        Ok(())
+    }
+
+    /// Relational layer. No cross-field relation is ratified yet.
+    /// This seam prevents hypotheses from entering validate() silently.
+    pub fn validate_relational(&self) -> Result<(), Vector15DError> {
+        Ok(())
+    }
+
+    fn require_inclusive(
+        field: &'static str,
+        value: f64,
+        min: f64,
+        max: f64,
+        expected: &'static str,
+    ) -> Result<(), Vector15DError> {
+        if value < min || value > max {
+            return Err(Vector15DError::OutOfRange {
+                field,
+                value,
+                expected,
+            });
+        }
+        Ok(())
+    }
+
+    /// Checked constructor: validates all ratified codec law before returning.
     /// Use this instead of struct literal construction when values come from
     /// external sources (audio extraction, user input, network, deserialization).
     pub fn try_new(
@@ -287,8 +365,17 @@ impl Vector15D {
             (self.magnetic_south.clamp(0.0, 1.0) * 99.0).round() as i32
         )
     }
+    pub fn detection_class(&self, limits: DetectionLimits) -> DetectionClass {
+        if self.composition < limits.min_composition && self.amplitude < limits.min_amplitude {
+            DetectionClass::BelowLimit
+        } else {
+            DetectionClass::Detected
+        }
+    }
+
+    #[deprecated(note = "use detection_class() with explicit DetectionLimits")]
     pub fn is_void(&self) -> bool {
-        self.composition < 0.01 && self.amplitude < 0.01
+        self.detection_class(DetectionLimits::LEGACY_GLYPH) == DetectionClass::BelowLimit
     }
 
     /// Checked version of to_glyph_props — returns Err on non-finite fields.
@@ -303,26 +390,30 @@ impl Vector15D {
         self.to_glyph_props()
     }
 
+    /// Derived rendering projection; never authoritative geometry.
     pub fn to_glyph_props(&self) -> GlyphProps {
-        let (color, is_v) = if self.is_void() {
-            ("hsl(0, 0%, 50%)".to_string(), true)
-        } else {
-            (
-                format!(
-                    "hsl({}, {}, {}%)",
-                    self.hue(),
-                    self.saturation() as u8,
-                    self.lightness() as u8
-                ),
-                false,
+        let detection = self.detection_class(DetectionLimits::LEGACY_GLYPH);
+        let is_below_limit = detection == DetectionClass::BelowLimit;
+        let color = if is_below_limit {
+            "hsl(0, 0%, 50%)".to_string()
+        } else if (0.0..360.0).contains(&self.su2_polarity) {
+            format!(
+                "hsl({}, {}%, {}%)",
+                self.su2_polarity,
+                self.saturation(),
+                self.lightness()
             )
+        } else {
+            // Preserve the historical out-of-range fallback without invalid CSS.
+            self.hue().to_string()
         };
         GlyphProps {
             color,
             weight: self.glyph_weight(),
             skew_deg: self.skew_deg(),
             glow_intensity: self.glow_intensity(),
-            is_void: is_v,
+            detection,
+            is_void: is_below_limit,
         }
     }
 }
@@ -368,13 +459,19 @@ mod tests {
             amplitude: 0.001,
             ..Default::default()
         };
-        assert!(v.is_void());
+        assert_eq!(
+            v.detection_class(DetectionLimits::LEGACY_GLYPH),
+            DetectionClass::BelowLimit
+        );
         let v2 = Vector13D {
             composition: 0.5,
             amplitude: 0.8,
             ..Default::default()
         };
-        assert!(!v2.is_void());
+        assert_eq!(
+            v2.detection_class(DetectionLimits::LEGACY_GLYPH),
+            DetectionClass::Detected
+        );
     }
 
     #[test]
@@ -423,6 +520,41 @@ mod tests {
             .glyph_weight(),
             900
         );
+    }
+
+    #[test]
+    fn test_detection_uses_explicit_limits() {
+        let v = Vector15D {
+            composition: 0.005,
+            amplitude: 0.005,
+            ..Default::default()
+        };
+        assert_eq!(
+            v.detection_class(DetectionLimits::LEGACY_GLYPH),
+            DetectionClass::BelowLimit
+        );
+        assert_eq!(
+            v.detection_class(DetectionLimits {
+                min_composition: 0.001,
+                min_amplitude: 0.001,
+            }),
+            DetectionClass::Detected
+        );
+    }
+
+    #[test]
+    fn test_non_void_glyph_uses_numeric_hsl_angle() {
+        let v = Vector15D {
+            amplitude: 0.5,
+            composition: 0.4,
+            ozone_buffer: 0.5,
+            su2_polarity: 280.0,
+            ..Default::default()
+        };
+        let p = v.to_glyph_props_checked().unwrap();
+        assert_eq!(p.color, "hsl(280, 40%, 52.5%)");
+        assert!(!p.is_void);
+        assert_eq!(p.detection, DetectionClass::Detected);
     }
 
     #[test]
@@ -476,6 +608,25 @@ mod tests {
 #[cfg(test)]
 mod storm_tests {
     use super::*;
+
+    #[test]
+    fn semantic_validation_rejects_ratified_range_violations() {
+        for (field, v) in [
+            ("ozone_buffer", Vector15D { ozone_buffer: 1.01, ..Default::default() }),
+            ("su2_polarity", Vector15D { su2_polarity: 360.0, ..Default::default() }),
+            ("closure", Vector15D { closure: -0.01, ..Default::default() }),
+        ] {
+            match v.validate_semantic() {
+                Err(Vector15DError::OutOfRange { field: actual, .. }) => assert_eq!(actual, field),
+                other => panic!("expected OutOfRange for {field}, got {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn relational_validation_is_explicit_noop_until_ratified() {
+        assert!(Vector15D::default().validate_relational().is_ok());
+    }
 
     /// Break 4: Vector13D stores NaN — no Result refusal.
     /// FIX: validate() returns Err on NaN fields.
