@@ -16,6 +16,8 @@
 
 use serde::{Deserialize, Serialize};
 
+pub mod profiles;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub enum DomainWall {
     #[default]

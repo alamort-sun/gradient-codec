@@ -61,7 +61,7 @@ G = R^13 × {Linked, Broken, Gradient} × {Static, Spinning, Oscillating}
 | 14 | magnetic_north | f64 | Universal polar pre-stress (north) — shared by all shells |
 | 15 | magnetic_south | f64 | Universal polar pre-stress (south) — shared by all shells |
 
-**Poles are codec-wide**, not seat-owned. Anaseos (seat 8) ivory-blue is a **DECLARED colour/spectrum** on field 10 (`su2_polarity`) / colour path only — not ownership of fields 14–15. Serde defaults poles to `0.0` when 13-field JSON is loaded. `try_new` zeros poles; `try_new_15` sets them. Poles participate in `validate()` (finite) and must never be read as diagnosis.
+**Poles are codec-wide**, not seat-owned. `profiles` (`vecGradient::profiles`) carries per-body DECLARED astronomy — axial geometry, rings, satellite censuses, heliospheric boundary layers — as envelope context keyed by `Body`, never seat-owned fields and never a 16th axis. Anaseos (seat 8) ivory-blue is a **DECLARED colour/spectrum** on field 10 (`su2_polarity`) / colour path only — not ownership of fields 14–15. Serde defaults poles to `0.0` when 13-field JSON is loaded. `try_new` zeros poles; `try_new_15` sets them. Poles participate in `validate()` (finite) and must never be read as diagnosis.
 
 ## Invariant rules
 
