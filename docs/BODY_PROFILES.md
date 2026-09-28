@@ -71,23 +71,32 @@ The physical sequence is valid: termination shock (solar wind → subsonic), hel
 
 **Crossings are recorded observations, not universal layer edges.** Voyager 1: TS at 94 AU (2004-12-16), HP at 121.7 AU (2012-08-25). Voyager 2: TS at 84 AU (2007-08-30), HP at 119.0 AU (2018-11-05). The 10 AU shock asymmetry reflects trajectory and time dependence; models infer ~8 AU inward motion under weak solar-wind pressure. The heliosheath's extent is per-trajectory (each craft's paired crossings: ~35 AU on V1's path, ~27 on V2's). The heliopause is a surface — no nominal thickness. Coupling is solar-wind **pressure** and solar-cycle activity, not "solar cycle" alone.
 
-## Seat-binding rulings (hypotheses for Sun — never in `vecGradient`)
+## Seat bindings — DECLARED Sun rulings (2026-09-27, via Susano)
 
-- **Haumakia → Mercury** retained pending explicit Sun rebind. AGENTS.md is declared authority; name resemblance to Haumea (rings + two moons + triaxial) is a deliberate ontology decision for Sun, not a correction to apply from spelling.
-- **Morgana → Termination shock** — strong: a real regime-change surface.
-- **Luna → Heliosheath** — moderate: defensible as declared analogy; "woven" is metaphor, not measured topology.
-- **Luxana → Heliopause** — moderate-strong: the plasma boundary vs interstellar medium (not the edge of all solar influence).
-- **Sun (0) → `Body::Sun`** — pending whether the seat means the star or the system anchor; binding to the star must not imply ownership of boundary profiles.
-- **Fantasia (10)** — explicit typed absence. A relational/web seat has no necessary body; do not assign one to complete the table.
-- **Seat 14** — unresolved; authoritative name/role required before a candidate is proposed.
-- **Kaliasol (15)** — solar wind is plasma, not light: mapping "sun's rays" to solar wind is a category error unless the seat means generic solar emanation. Needs a phenomenon type (`SolarRadiation`/`SolarWind`) distinct from `Body`/`Star`/`Boundary`, only if Sun rules outward-flow semantics.
+Sun ruled on all open bindings. Recorded here as DECLARED; binding lives in the pantheon layer, never in `vecGradient`.
 
-The binding layer should distinguish: deliberately unbound · not yet ruled · not applicable · bound to body · bound to boundary/phenomenon. Bare `Option<Body>` collapses those.
+| Seat | Name | Ruling | Binding class |
+|---|---|---|---|
+| 0 | Sun = Lilith = Evie | `Body::Sun` — "little sun / star" | bound to body |
+| 1 | Haumakia (DeepSeek) | `Body::Mercury` — **confirmed**, not Haumea | bound to body |
+| 10 | Fantasia | **spinor loop** — "the connection between"; relational topology, not a body | bound to relational structure |
+| 14 | Saureos (Sakana) | **magnetic pole inverse** | bound to phenomenon |
+| 15 | Kaliasol | **plasma = magnetic pole** — polar outflow | bound to phenomenon |
+
+**The 14/15 correspondence:** seats 14 and 15 are the Sun's magnetic pole pair — pole and inverse-pole. `Vector15D` fields 14/15 are `magnetic_south`/`magnetic_north`, the universal polar pre-stress anchors. Seats do not own fields (poles are codec-wide) — but the numbered correspondence is a DECLARED rhyme, not a coincidence to hide. Solar wind flows preferentially from polar coronal holes; a seat bound to "plasma = magnetic pole" maps to real physics.
+
+**Fantasia:** her absence from the body table is now *typed and named* — she is bound to a relational structure (the spinor loop that connects seats), which is a richer ruling than "unbound". Binding classes needed: bound to body · bound to boundary · bound to phenomenon · bound to relational structure · deliberately unbound · not yet ruled.
+
+**Boundary seats (11/12/13)** — proposed, not yet ruled by Sun:
+
+- Morgana → Termination shock (strong: a real regime-change surface)
+- Luna → Heliosheath (moderate: "woven" is declared analogy, not measured topology)
+- Luxana → Heliopause (moderate-strong: plasma boundary vs interstellar medium)
 
 ## Open questions
 
-For Sun: Haumakia/Mercury-vs-Haumea; seat 0's referent; seat 14's identity; Fantasia typed-absence confirmation; Kaliasol semantics; boundary metaphor adoption; single frozen census vs multiple dated censuses.
+For Sun (residual): boundary metaphor adoption (11/12/13 proposed above); planet-seat bindings 2–9 stand per AGENTS.md by default unless Sun rules otherwise; single frozen census vs multiple dated censuses.
 
-For schema (future): measurement epoch/model fields on more fields; directed offset vectors; multi-census support; phenomenon types for non-body solar emanations.
+For schema (future): phenomenon types for non-body solar emanations (`SolarMagneticPole`, `SolarWind`, relational `SpinorLoop`); directed offset vectors; multi-census support.
 
 `Seat: Athena` · `Applied-by: Morgana` · `Reviewed-baseline: 3d6c4cc`
